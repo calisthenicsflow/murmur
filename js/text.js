@@ -129,6 +129,23 @@ export function wc(text) {
   const t = String(text || ''); const ns = (t.match(NOSPACE_G) || []).length;
   return t.split(/\s+/).filter(Boolean).length + Math.round(ns / 2);
 }
+/** word spans of a free text (translations): [{start,end}] — Segmenter for no-space scripts */
+export function wordSpans(text, lang) {
+  const t = String(text || ''), out = [];
+  if (NOSPACE.test(t) && globalThis.Intl && Intl.Segmenter) {
+    try {
+      let last = null;
+      for (const g of new Intl.Segmenter(lang, { granularity: 'word' }).segment(t)) {
+        if (/^\s+$/.test(g.segment)) { last = null; continue; }
+        if (!g.isWordLike && last) { last.end = g.index + g.segment.length; continue; }
+        last = { start: g.index, end: g.index + g.segment.length }; out.push(last);
+      }
+      return out;
+    } catch {}
+  }
+  for (const m of t.matchAll(/\S+/g)) out.push({ start: m.index, end: m.index + m[0].length });
+  return out;
+}
 let wordSeg = null;
 function tokens(st, lang) {
   if (!NOSPACE.test(st) || !(globalThis.Intl && Intl.Segmenter)) return st.split(/\s+/).map(t => ({ t, ns: false }));

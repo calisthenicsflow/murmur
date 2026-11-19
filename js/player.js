@@ -5,7 +5,7 @@ export class Player {
     this.playing = false; this.paused = false; this.cur = 0; this.curSent = 0; this.ctrl = null; this.chunks = []; this.ci = 0;
     this.bilingual = null; // { to, voice, translate:(sIdx)=>Promise<string> }
     this.voiceFor = null;  // (lang) => voice id for sentences in another language (mixed texts)
-    this.on = { word: () => {}, sentence: () => {}, state: () => {}, end: () => {}, error: () => {}, trans: () => {} };
+    this.on = { word: () => {}, sentence: () => {}, state: () => {}, end: () => {}, error: () => {}, trans: () => {}, transWord: () => {} };
   }
   setModel(model, lang) { this.stop(); this.model = model; this.lang = lang; this.cur = 0; this.curSent = 0; }
   maxChars() { return this.engine && this.engine.id === 'neural' ? 320 : 200; }
@@ -41,6 +41,7 @@ export class Player {
   play(fromWord = this.cur) {
     if (!this.model || !this.engine) return;
     this.halt();
+    this.on.trans(-1, false); // a restart never keeps a stale translation highlight
     this.chunks = this.build(fromWord); this.ci = 0; this.playing = true; this.paused = false;
     this.on.state();
     this.next();
@@ -69,9 +70,13 @@ export class Player {
     if (!this.playing || this.chunks[this.ci]?.trans !== s) return;
     if (!text) { this.ci++; return this.next(); }
     this.on.trans(s, true);
-    const chunk = { text, map: [{ start: 0, end: text.length, w: this.cur }], lang: b.to };
+    // each translated word is its own map entry so the highlight can walk the translation line
+    const spans = (b.spans ? b.spans(text) : null) || [{ start: 0, end: text.length }];
+    const chunk = { text, map: spans.map((x, k) => ({ start: x.start, end: x.end, w: k })), lang: b.to };
+    const my = this.ci;
     this.ctrl = (b.engine || this.engine).play(chunk, {
-      voice: b.voice, rate: this.rate, volume: this.volume, onWord: () => {},
+      voice: b.voice, rate: this.rate, volume: this.volume,
+      onWord: k => { if (this.ci === my) this.on.transWord(s, k); },
       onEnd: () => { this.on.trans(s, false); this.ci++; this.next(); },
       onError: () => { this.on.trans(s, false); this.ci++; this.next(); }
     });

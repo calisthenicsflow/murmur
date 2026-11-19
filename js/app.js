@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.1.1';
+import { db } from './db.js?v=1.2.0';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc } from './text.js?v=1.1.1';
-import { coverSVG, autoCover } from './covers.js?v=1.1.1';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.1.1';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.1.1';
-import { Player } from './player.js?v=1.1.1';
-import { translateMany } from './translate.js?v=1.1.1';
-import { track, summary } from './stats.js?v=1.1.1';
-import { renderCard, shareCard } from './quotes.js?v=1.1.1';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.1.1';
-import { SAMPLES } from './samples.js?v=1.1.1';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.2.0';
+import { coverSVG, autoCover } from './covers.js?v=1.2.0';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.2.0';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.2.0';
+import { Player } from './player.js?v=1.2.0';
+import { translateMany } from './translate.js?v=1.2.0';
+import { track, summary } from './stats.js?v=1.2.0';
+import { renderCard, shareCard } from './quotes.js?v=1.2.0';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.2.0';
+import { SAMPLES } from './samples.js?v=1.2.0';
 
-export const APP_VERSION = '1.1.1';
+export const APP_VERSION = '1.2.0';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -46,7 +46,7 @@ const FS_STEPS = [14, 16, 18, 21, 24, 28, 32, 36], FS_MIN = 14, FS_MAX = 36;
 const TR_LANGS = ['ru', 'en', 'es', 'de', 'fr', 'it', 'uk', 'pt', 'tr', 'zh', 'ja'];
 
 /* ------------------------------ state ------------------------------ */
-const DEF = { align: 'justify', theme: 'paper', fs: 19, font: 'literata', lh: 1.62, dim: 0, engine: 'auto', voices: {}, rate: 1, skip: true, bi: false, biTo: '', both: false, focus: false, relay: '' };
+const DEF = { align: 'justify', theme: 'paper', fs: 19, font: 'literata', lh: 1.62, dim: 0, engine: 'auto', voices: {}, rate: 1, skip: true, bi: false, biTo: '', both: false, readTr: true, bare: false, hints: {}, focus: false, relay: '' };
 const prefs = Object.assign({}, DEF, JSON.parse(localStorage.getItem('murmur:prefs') || '{}'));
 const savePrefs = () => localStorage.setItem('murmur:prefs', JSON.stringify(prefs));
 const S = { books: [], book: null, sec: 0, model: null, mode: 'read', wordEls: [], sentEls: [], curW: -1, curS: 0, neuralOk: false, relay: '', timer: null, trans: {}, lastUserScroll: 0, lastInteract: Date.now(), screen: 'library', stack: [] };
@@ -155,6 +155,14 @@ function bookMenu(id) {
   });
 }
 $('#btnAdd').onclick = () => openAdd();
+$('#btnAbout').onclick = () => openSheet(`<div class="sh-title">${t('about')}<button class="x" data-close>${ICON.x}</button></div>
+  <div class="about"><div class="brand">murmur<i></i></div><small>v${APP_VERSION}</small><p>${t('aboutLead')}</p>
+  <h4>${t('privacy')}</h4><p>${t('privacyBody')}</p>
+  ${navigator.standalone || matchMedia('(display-mode: standalone)').matches ? '' : `<h4>${t('installTitle')}</h4><p>${t('installBody')}</p>`}
+  <p class="note">${t('credits')}</p>
+  <button class="about-btn" id="resetHints">${t('resetHints')}</button></div>`, body => {
+  body.querySelector('#resetHints').onclick = () => { prefs.hints = {}; savePrefs(); toast(t('hintsReset')); };
+});
 $('#btnLang').onclick = () => { setUiLang(uiLang() === 'en' ? 'ru' : 'en'); renderLibrary(); };
 $('#btnQuotes').onclick = () => { renderQuotes(); show('quotes'); };
 $('#btnStats').onclick = () => { renderStats(); show('stats'); };
@@ -234,7 +242,9 @@ async function openBook(id, autoplay = false) {
   S.sec = Math.min(b.pos?.sec || 0, b.sections.length - 1);
   setMode(autoplay ? 'listen' : 'read', true);
   show('reader');
+  setBare(prefs.bare, false);
   renderSection(b.pos?.w || 0);
+  setTimeout(() => { if (S.screen === 'reader' && !prefs.bare) hint('tapHide', t('hintTapHide')); }, 1200);
   if (autoplay) { unlockAudio(); startPlayback(S.curW >= 0 ? S.curW : 0); }
 }
 function leaveReader() { player.stop(); savePos(); hidePop(); $('#focus').classList.remove('show'); updateMediaSession(); }
@@ -256,7 +266,7 @@ function renderSection(startWord = 0, scroll = true) {
     first = false;
     for (const s of p.sents) {
       html += `<span class="s" data-s="${s}">` + sents[s].words.map(w => `<span class="w${words[w].say ? '' : ' sk'}${/^\(?(https?:|www\.)/i.test(words[w].t) ? ' u' : ''}" data-w="${w}">${esc(words[w].t)}</span>`).map((h, k) => h + (words[sents[s].words[k]].ns ? '' : ' ')).join('').trimEnd() + '</span>';
-      html += `<span class="tr${tr[s] ? '' : ' load'}" data-t="${s}">${esc(tr[s] || '·')}</span> `;
+      html += `<span class="tr${tr[s] ? '' : ' load'}" data-t="${s}">${tr[s] ? trHtml(tr[s]) : '·'}</span> `;
     }
     html += '</p>';
   }
@@ -308,12 +318,12 @@ function setCurrent(w, fromPlayer) {
 }
 function positionHL(instant) {
   const hl = $('#hl'); if (!hl) return;
-  const el = S.wordEls[S.curW];
+  const el = (S.trEl && S.trEl.isConnected && S.trEl) || S.wordEls[S.curW];
   const active = S.mode === 'listen' && (player.playing || player.paused) && el;
   if (!active) { hl.classList.remove('on'); return; }
   // a word broken across two lines (hyphenation) would make one huge box over both lines:
   // paint that word inline instead and park the floating box
-  $$('#rdText .w.split').forEach(x => x !== el && x.classList.remove('split'));
+  $$('#rdText .split').forEach(x => x !== el && x.classList.remove('split'));
   if (el.getClientRects().length > 1) { el.classList.add('split'); hl.classList.remove('on'); return; }
   el.classList.remove('split');
   const art = $('#rdText').getBoundingClientRect(), r = el.getBoundingClientRect();
@@ -322,6 +332,10 @@ function positionHL(instant) {
   hl.style.width = r.width + 6 + 'px'; hl.style.height = r.height + 2 + 'px';
   hl.classList.add('on');
   if (instant) { hl.offsetWidth; hl.style.transition = ''; }
+}
+function scrollEl(el, smooth = true) {
+  const sc = $('#rdScroll'); const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - sc.clientHeight * 0.33;
+  sc.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
 }
 function scrollToWord(w, smooth = true) {
   const el = S.wordEls[w], sc = $('#rdScroll'); if (!el) return;
@@ -358,16 +372,41 @@ document.fonts && document.fonts.ready.then(() => positionHL(true));
 function updateProgress() {
   if (!S.model) return;
   const n = S.model.sents.length, s = Math.max(0, S.curS);
-  $('#pBar').style.width = ((s + 1) / n * 100) + '%';
+  $('#pBar').style.width = $('#thinProg i').style.width = ((s + 1) / n * 100) + '%';
   $('#pPos').textContent = `${s + 1} / ${n}`;
   const left = S.model.words.length - (S.curW > 0 ? S.curW : 0);
   const min = Math.max(1, Math.round(left / (2.55 * player.rate) / 60));
   $('#pLeft').textContent = `${S.book.sections.length > 1 ? (S.sec + 1) + ' ' + t('chapterOf') + ' ' + S.book.sections.length + ' · ' : ''}~${min} ${t('min')}`;
 }
 
+/* ------------------------------ distraction-free (bare) mode ------------------------------ */
+function setBare(on, save = true) {
+  prefs.bare = !!on; if (save) savePrefs();
+  $('#reader').classList.toggle('bare', prefs.bare);
+  const b = $('#rdChrome'); b.setAttribute('aria-pressed', prefs.bare); b.setAttribute('aria-label', prefs.bare ? t('showControls') : t('hideControls'));
+  if (prefs.bare) hidePop();
+}
+$('#rdChrome').onclick = e => { e.stopPropagation(); setBare(!prefs.bare); hint('bare'); };
+// tap on an empty part of the page toggles the controls; taps on words keep seeking / opening the popover
+let tapSel = '';
+$('#rdScroll').addEventListener('pointerdown', () => { tapSel = String(getSelection() || ''); });
+$('#rdScroll').addEventListener('click', e => {
+  if (e.target.closest('.w, .tw, button, a, input, select, #rdNext')) return;
+  if ($('#pop').classList.contains('show')) return hidePop();
+  if (tapSel || String(getSelection() || '')) return;
+  setBare(!prefs.bare);
+});
+/* one-time hints */
+function hint(k, msg) {
+  prefs.hints = prefs.hints || {}; if (prefs.hints[k]) return false;
+  prefs.hints[k] = 1; savePrefs();
+  if (msg) { const c = $('#coach'); c.innerHTML = msg; c.classList.add('show'); clearTimeout(S.coachT); S.coachT = setTimeout(() => c.classList.remove('show'), 5200); c.onclick = () => c.classList.remove('show'); }
+  return true;
+}
+
 /* tap on text */
 $('#rdText').addEventListener('click', e => {
-  const w = e.target.closest('.w'); if (!w) return hidePop();
+  const w = e.target.closest('.w'); if (!w) return;
   const wi = +w.dataset.w;
   S.lastInteract = Date.now();
   if (S.mode === 'listen') { unlockAudio(); S.lastUserScroll = 0; startPlayback(wi); return; }
@@ -448,7 +487,7 @@ async function setupBilingualVoice() {
   // translations are new text: without a relay, neural can't voice them, so the device voice reads them
   let te = eng, tv = v;
   if (eng.id === 'neural' && !S.neuralOk) { te = device; const dv = await device.voices().catch(() => []); tv = prefs.voices[voiceKey(to, device)] || device.defaultVoice(to, dv); }
-  player.bilingual = prefs.bi ? { to, voice: tv, engine: te, readBoth: prefs.both, translate: s => getTrans(s) } : null;
+  player.bilingual = prefs.bi ? { to, voice: tv, engine: te, readBoth: prefs.readTr, translate: s => getTrans(s), spans: x => wordSpans(x, to) } : null;
 }
 /** fetch the audio of the sentence that would play next, so Play starts instantly */
 async function warmFirst() {
@@ -467,7 +506,7 @@ player.on.word = w => { $('#pPlay').classList.remove('loading'); setCurrent(w, t
 player.on.sentence = () => {};
 player.on.state = () => {
   const p = $('#pPlay'); p.classList.toggle('playing', player.playing); if (!player.playing) p.classList.remove('loading');
-  if (!player.playing && !player.paused) $$('.w.cw').forEach(x => x.classList.remove('cw'));
+  if (!player.playing && !player.paused) { $$('.w.cw').forEach(x => x.classList.remove('cw')); player.on.trans(-1, false); }
   positionHL();
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = player.playing ? 'playing' : 'paused';
 };
@@ -485,10 +524,21 @@ player.on.error = e => {
     clearTimeout(S.reNeural); S.reNeural = setTimeout(async () => { S.neuralFailed = false; if (!(await checkRelay()) && !(S.book && S.staticBooks?.has(S.book.id))) S.neuralFailed = true; else if (!player.playing) syncVoice(); }, 45000);
   }
 };
+// translation line being voiced: the highlight leaves the original and walks the translation
 player.on.trans = (s, on) => {
   $$('.tr.speaking').forEach(x => x.classList.remove('speaking'));
-  if (on) $(`.tr[data-t="${s}"]`)?.classList.add('speaking');
+  $$('.tw.cw').forEach(x => x.classList.remove('cw'));
+  S.trEl = null;
+  if (on) { $(`.tr[data-t="${s}"]`)?.classList.add('speaking'); S.wordEls[S.curW]?.classList.remove('cw'); }
   const ft = $('#fStage .f-tr'); if (ft) ft.classList.toggle('speaking', on);
+  positionHL();
+};
+player.on.transWord = (s, k) => {
+  const el = $(`.tr[data-t="${s}"] .tw[data-k="${k}"]`); if (!el) return;
+  $('#pPlay').classList.remove('loading');
+  S.trEl?.classList.remove('cw'); S.trEl = el; el.classList.add('cw');
+  positionHL();
+  if (!prefs.focus && Date.now() - S.lastUserScroll > 4000) { const sc = $('#rdScroll'), r = el.getBoundingClientRect(), b = sc.getBoundingClientRect(); if (r.top < b.top + 90 || r.bottom > b.bottom - sc.clientHeight * 0.42) scrollEl(el); }
 };
 $('#pPlay').onclick = () => {
   unlockAudio();
@@ -542,7 +592,8 @@ async function getTrans(s) {
   if (x) { S.trans[k][s] = x; fillTr(s, x); }
   return x;
 }
-function fillTr(s, x) { const el = $(`.tr[data-t="${s}"]`); if (el) { el.textContent = x; el.classList.remove('load'); } if (prefs.focus && s === S.curS) renderFocus(true); }
+function trHtml(x) { const sp = wordSpans(x, biTarget()); let h = '', p = 0; sp.forEach((r, k) => { h += esc(x.slice(p, r.start)) + `<span class="tw" data-k="${k}">${esc(x.slice(r.start, r.end))}</span>`; p = r.end; }); return h + esc(x.slice(p)); }
+function fillTr(s, x) { const el = $(`.tr[data-t="${s}"]`); if (el) { el.innerHTML = trHtml(x); el.classList.remove('load'); } if (prefs.focus && s === S.curS) renderFocus(true); }
 let trRun = 0;
 async function ensureTranslations() {
   const my = ++trRun, k = transKey(), arr = S.trans[k] = S.trans[k] || [];
@@ -562,7 +613,8 @@ function setBilingual(on) {
   prefs.bi = on; savePrefs();
   $('#rdText').classList.toggle('bi', on); $('#pBi').classList.toggle('on', on);
   if (on) ensureTranslations(); else { trRun++; player.bilingual = null; }
-  // the main text keeps its language and voice; the translation is only voiced when "read both" is on
+  if (on && prefs.readTr) hint('biVoice', t('hintBiVoice'));
+  // the main text keeps its language and voice; the translation line is voiced after each sentence unless switched off
   const wasPlaying = player.playing;
   setupBilingualVoice().then(() => { if (wasPlaying && player.playing) player.play(S.curW); });
   if (prefs.focus) renderFocus(true);
@@ -590,7 +642,7 @@ $('#rdMore').onclick = () => {
     <div class="row" data-tg="focus"><div class="ic">${ICON.focus}</div><div class="tx"><b>${t('focus')}</b></div><i class="sw ${prefs.focus ? 'on' : ''}"></i></div>
     <div class="row" data-tg="bi"><div class="ic">${ICON.tr}</div><div class="tx"><b>${t('bilingual')}</b></div><i class="sw ${prefs.bi ? 'on' : ''}"></i></div>
     <div class="row" style="cursor:default"><div class="tx" style="padding-left:48px"><b style="font-weight:500;font-size:14px;color:var(--ink2)">${t('translateTo')}</b></div><select id="biTo" style="width:auto;min-width:140px;padding:9px 12px;font-size:15px">${langs}</select></div>
-    <div class="row" data-tg="both"><div class="ic">${ICON.headph}</div><div class="tx"><b>${t('readBoth')}</b></div><i class="sw ${prefs.both ? 'on' : ''}"></i></div>
+    <div class="row" data-tg="both"><div class="ic">${ICON.headph}</div><div class="tx"><b>${t('readTr')}</b><small>${t('readTrHint')}</small></div><i class="sw ${prefs.readTr ? 'on' : ''}"></i></div>
     <div class="row" data-tg="skip"><div class="ic">${ICON.wand}</div><div class="tx"><b>${t('skipFiller')}</b><small>${t('skipFillerHint')}</small></div><i class="sw ${prefs.skip ? 'on' : ''}"></i></div>
     ${b.sections.length > 1 ? `<div class="sh-label">${t('contents')}</div>${toc}` : ''}
     <div class="sh-label">${t('bookmarks')}</div>${marks}`, body => {
@@ -598,7 +650,7 @@ $('#rdMore').onclick = () => {
       const k = r.dataset.tg, sw = r.querySelector('.sw');
       if (k === 'focus') { toggleFocus(); sw.classList.toggle('on', prefs.focus); }
       if (k === 'bi') { setBilingual(!prefs.bi); sw.classList.toggle('on', prefs.bi); }
-      if (k === 'both') { prefs.both = !prefs.both; savePrefs(); sw.classList.toggle('on', prefs.both); if (prefs.both && !prefs.bi) { setBilingual(true); body.querySelector('[data-tg=bi] .sw').classList.add('on'); } else { const wp = player.playing; setupBilingualVoice().then(() => { if (wp && player.playing) player.play(S.curW); }); } }
+      if (k === 'both') { prefs.readTr = !prefs.readTr; savePrefs(); sw.classList.toggle('on', prefs.readTr); if (prefs.readTr && !prefs.bi) { setBilingual(true); body.querySelector('[data-tg=bi] .sw').classList.add('on'); } else { const wp = player.playing; setupBilingualVoice().then(() => { if (wp && player.playing) player.play(S.curW); }); } }
       if (k === 'skip') { prefs.skip = !prefs.skip; savePrefs(); sw.classList.toggle('on', prefs.skip); const w = S.curW; player.stop(); renderSection(w); }
     });
     body.querySelector('#biTo').onchange = async e => { const wp = player.playing, w = S.curW; prefs.biTo = e.target.value; savePrefs(); renderSection(w, false); if (prefs.bi) ensureTranslations(); await S.voiceReady; if (wp) startPlayback(w); };
