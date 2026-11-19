@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.2.0';
+import { db } from './db.js?v=1.2.1';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.2.0';
-import { coverSVG, autoCover } from './covers.js?v=1.2.0';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.2.0';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.2.0';
-import { Player } from './player.js?v=1.2.0';
-import { translateMany } from './translate.js?v=1.2.0';
-import { track, summary } from './stats.js?v=1.2.0';
-import { renderCard, shareCard } from './quotes.js?v=1.2.0';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.2.0';
-import { SAMPLES } from './samples.js?v=1.2.0';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.2.1';
+import { coverSVG, autoCover } from './covers.js?v=1.2.1';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.2.1';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.2.1';
+import { Player } from './player.js?v=1.2.1';
+import { translateMany } from './translate.js?v=1.2.1';
+import { track, summary } from './stats.js?v=1.2.1';
+import { renderCard, shareCard } from './quotes.js?v=1.2.1';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.2.1';
+import { SAMPLES } from './samples.js?v=1.2.1';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.2.1';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -156,7 +156,7 @@ function bookMenu(id) {
 }
 $('#btnAdd').onclick = () => openAdd();
 $('#btnAbout').onclick = () => openSheet(`<div class="sh-title">${t('about')}<button class="x" data-close>${ICON.x}</button></div>
-  <div class="about"><div class="brand">murmur<i></i></div><small>v${APP_VERSION}</small><p>${t('aboutLead')}</p>
+  <div class="about"><img class="about-icon" src="icons/icon-192.png?v=${APP_VERSION}" alt=""><div class="brand">murmur<i></i></div><small>v${APP_VERSION}</small><p>${t('aboutLead')}</p>
   <h4>${t('privacy')}</h4><p>${t('privacyBody')}</p>
   ${navigator.standalone || matchMedia('(display-mode: standalone)').matches ? '' : `<h4>${t('installTitle')}</h4><p>${t('installBody')}</p>`}
   <p class="note">${t('credits')}</p>

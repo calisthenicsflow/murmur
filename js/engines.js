@@ -5,9 +5,9 @@
 // chunk = { text, map:[{start,end,w}], lang }. opts = { voice, rate, volume, onWord(w), onEnd(), onError(e) }
 // A premium engine (ElevenLabs / Grok TTS / Azure) only needs to return audio + word timings
 // to reuse AudioEngine below — see createAudioEngine({ synth }).
-import { norm } from './text.js?v=1.2.0';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.2.0';
-import { db } from './db.js?v=1.2.0';
+import { norm } from './text.js?v=1.2.1';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.2.1';
+import { db } from './db.js?v=1.2.1';
 
 const NOVELTY = /^(Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Deranged|Good News|Hysterical|Jester|Junior|Organ|Pipe Organ|Ralph|Superstar|Trinoids|Whisper|Wobble|Zarvox|Fred|Kathy|Grandma|Grandpa|Eddy|Flo|Reed|Rocko|Sandy|Shelley)\b/i;
 const LANG_NAMES = (() => { try { return new Intl.DisplayNames(['en'], { type: 'language' }); } catch { return null; } })();

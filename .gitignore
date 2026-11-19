@@ -2,3 +2,4 @@ _src/
 _shots/
 __pycache__/
 *.pyc
+_icon/
