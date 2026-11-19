@@ -14,6 +14,10 @@ export class Player {
     const { words, sents } = this.model; const out = [];
     const s0 = words[fromWord] ? words[fromWord].s : 0;
     const both = this.bilingual && this.bilingual.readBoth;
+    if (this.bilingual && this.bilingual.only) { // translated reading: only the translation of each sentence is voiced
+      for (let s = s0; s < sents.length; s++) if (sents[s].words.some(w => words[w].say)) out.push({ trans: s });
+      return out;
+    }
     let cur = null;
     const flush = () => { if (cur && cur.map.length) out.push(cur); cur = null; };
     for (let s = s0; s < sents.length; s++) {
@@ -69,6 +73,7 @@ export class Player {
     try { text = await b.translate(s); } catch {}
     if (!this.playing || this.chunks[this.ci]?.trans !== s) return;
     if (!text) { this.ci++; return this.next(); }
+    if (b.only) { const w0 = this.model.sents[s].words[0]; this.cur = w0; if (s !== this.curSent) { this.curSent = s; this.on.sentence(s); } this.on.word(w0); }
     this.on.trans(s, true);
     // each translated word is its own map entry so the highlight can walk the translation line
     const spans = (b.spans ? b.spans(text) : null) || [{ start: 0, end: text.length }];

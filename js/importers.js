@@ -1,5 +1,5 @@
 // Importers: plain text, PDF (pdf.js), EPUB (JSZip), web article (r.jina.ai reader).
-import { splitSections, detectLang, wc } from './text.js?v=1.2.3';
+import { splitSections, detectLang, wc } from './text.js?v=1.3.0';
 
 const loadScript = src => new Promise((res, rej) => {
   if (document.querySelector(`script[src="${src}"]`)) return res();
@@ -58,7 +58,10 @@ export async function fromPDF(file, name = file.name || 'Book') {
     pages.push(txt);
   }
   const text = pages.join('\n\n');
+  const numPages = pdf.numPages;
   pdf.destroy();
+  // whatever the early check decided: a PDF with (almost) no text layer is a scan → OCR, never "no text"
+  if (wc(text) < Math.max(30, numPages * 3)) return { scanned: true, pages: numPages, title: metaTitle || name.replace(/\.pdf$/i, '').replace(/[_]+/g, ' '), titleFromName: !metaTitle, author: meta.info?.Author || '' };
   const title = metaTitle || name.replace(/\.pdf$/i, '');
   return { title, author: meta.info?.Author || '', lang: detectLang(text), sections: splitSections(text, title) };
 }

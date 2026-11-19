@@ -1,8 +1,8 @@
 // Universal book import: the format is sniffed from the bytes (magic numbers / zip contents),
 // never trusted from the file name or MIME type (iOS Files often says application/octet-stream).
 // Loaded lazily the first time a file is imported.
-import { splitSections, detectLang, wc } from './text.js?v=1.2.3';
-import { fromText, fromPDF, fromEPUB, mdToText } from './importers.js?v=1.2.3';
+import { splitSections, detectLang, wc } from './text.js?v=1.3.0';
+import { fromText, fromPDF, fromEPUB, mdToText } from './importers.js?v=1.3.0';
 
 export class ImportError extends Error { constructor(code, fmt) { super(code); this.code = code; this.fmt = fmt || ''; } }
 
@@ -296,7 +296,7 @@ export async function importBuffer(buf, name, onProgress, file) {
 }
 async function sniffAndParse(buf, name, onProgress, file) {
   const u8 = new Uint8Array(buf);
-  if (!u8.length) throw new ImportError('empty', '');
+  if (!u8.length) throw new ImportError('emptyFile', '');
   const head = ascii(u8, 0, Math.min(u8.length, 1024));
   const ext = ((name || '').toLowerCase().match(/\.([a-z0-9]{1,5})$/) || [])[1] || '';
   // binary containers

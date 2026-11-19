@@ -2,9 +2,9 @@
 // tesseract.js (lazy, from jsDelivr, in a Web Worker) recognises it, and every finished page is
 // saved into the book at once — so it is read/listened to while the rest is still being recognised,
 // and never recognised twice. The PDF itself waits in IndexedDB until the job is done.
-import { db } from './db.js?v=1.2.3';
-import { openPDF } from './importers.js?v=1.2.3';
-import { wc } from './text.js?v=1.2.3';
+import { db } from './db.js?v=1.3.0';
+import { openPDF } from './importers.js?v=1.3.0';
+import { wc } from './text.js?v=1.3.0';
 import { t } from './i18n.js';
 
 const TESS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/';
@@ -78,7 +78,11 @@ export async function runOCR(book) {
       const blob = await db.get('files', book.id);
       if (!blob) throw new Error('nofile');
       book.ocr.state = 'running'; emit(book);
-      pdf = await openPDF(await (blob.arrayBuffer ? blob.arrayBuffer() : blob));
+      // stored as raw bytes (iOS WebViews / some WebKit builds can't keep File/Blob objects in IndexedDB);
+      // older entries may still be Blobs
+      let bytes = blob instanceof Uint8Array ? blob.slice() : blob instanceof ArrayBuffer ? new Uint8Array(blob.slice(0)) : typeof blob.arrayBuffer === 'function' ? new Uint8Array(await blob.arrayBuffer()) : null;
+      if (!bytes || !bytes.length) throw new Error('stored PDF is unreadable — import the file again');
+      pdf = await openPDF(bytes);
       await loadScript(TESS + 'tesseract.min.js');
       worker = await window.Tesseract.createWorker(book.ocr.langs || 'rus+eng', 1, { workerPath: TESS + 'worker.min.js', corePath: CORE, logger: m => { if (m.status === 'recognizing text') emit(book, { pageProgress: m.progress }); } });
       await worker.setParameters({ preserve_interword_spaces: '0' });
