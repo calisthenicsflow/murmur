@@ -1,0 +1,44 @@
+const D = {
+  en: {
+    myFav: 'My Favourite', books: 'Books', addBooks: 'Add Books', book1: 'book', bookN: 'books',
+    continue: 'Continue', shelf_novels: 'Novels', shelf_philosophy: 'Philosophy', shelf_russian: 'Russian Prose', shelf_design: 'Design',
+    shelf_psychology: 'Psychology', shelf_articles: 'Articles', shelf_mine: 'My Imports',
+    read: 'Read', listen: 'Listen', timer: 'Timer', off: 'Off', endChapter: 'End of chapter', sleepTimer: 'Sleep timer', fadeNote: 'The voice gently fades out over the last 20 seconds.',
+    appearance: 'Appearance', theme: 'Theme', paper: 'Paper', sepia: 'Sepia', night: 'Night', textSize: 'Text size', typeface: 'Typeface', brightness: 'Brightness', lineSpacing: 'Line spacing',
+    addTitle: 'Add to library', paste: 'Paste text', file: 'Import file', url: 'From a link', pasteHint: 'Paste any text — an article, notes, a chapter…', titleOpt: 'Title (optional)',
+    fileHint: 'TXT, PDF or EPUB', choose: 'Choose file', urlHint: 'https://… article address', importBtn: 'Add to shelf', shelf: 'Shelf', importing: 'Importing…', fetching: 'Fetching article…',
+    urlFail: 'Could not load that page. Some sites block readers — copy the text and use “Paste text” instead.', fileFail: 'Could not read this file.', emptyText: 'There is no readable text here.', added: 'Added to your shelf',
+    contents: 'Contents', bookmarks: 'Bookmarks', noBookmarks: 'No bookmarks yet — tap the ribbon while reading.', focus: 'Focus mode', bilingual: 'Bilingual', translateTo: 'Translate to', readBoth: 'Read original, then translation',
+    skipFiller: 'Skip filler', skipFillerHint: 'Links, footnote marks and page numbers are not read aloud', voice: 'Voice', speed: 'Speed', engine: 'Voice engine', neural: 'Neural', device: 'Device', neuralHint: 'Microsoft neural voices · word-exact highlight', deviceHint: 'Voices built into this phone (Siri on iPhone)',
+    neuralOff: 'Neural voices are offline right now — using device voices.', listenFrom: 'Listen from here', saveQuote: 'Save as quote', copy: 'Copy', translate: 'Translate', quoteSaved: 'Quote saved', copied: 'Copied',
+    quotes: 'Quotes', noQuotes: 'Tap any sentence while reading and choose “Save as quote”.', share: 'Share card', delete: 'Delete', stats: 'Your reading', minListened: 'min listened', minRead: 'min read', streak: 'day streak', dayStreak: 'Day streak', thisWeek: 'This week', totalBooks: 'books on shelves', quotesSaved: 'quotes saved',
+    chapterOf: 'of', nextChapter: 'Next chapter', loadingVoices: 'Loading voices…', recommended: 'Recommended', translating: 'Translating…', translationFail: 'Translation is unavailable right now.',
+    deleteBook: 'Remove from library', confirmDelete: 'Remove this book?', language: 'Interface', settings: 'Settings', relay: 'Neural relay', relayHint: 'Optional. Address of a Murmur relay (relay/relay.py) — unlocks all 300+ neural voices for any text.', online: 'Online', offline: 'Offline', bookmarkAdded: 'Bookmark added', bookmarkRemoved: 'Bookmark removed', end: 'The end',
+    timerDone: 'Sleep timer finished', alignment: 'Alignment', justify: 'Justified', alignLeft: 'Left', searchVoices: 'Search voices or languages', neuralSamples: 'sample books are pre-voiced; your own texts need the relay (offline now) and use device voices.', neuralOffBook: 'Neural voices for your own texts need the relay — using device voices.', words: 'words', min: 'min', sample: 'Sample', cancel: 'Cancel', done: 'Done', today: 'Today', original: 'Original'
+  },
+  ru: {
+    myFav: 'Мои любимые', books: 'Книги', addBooks: 'Добавить', book1: 'книга', bookN: 'книг',
+    continue: 'Продолжить', shelf_novels: 'Романы', shelf_philosophy: 'Философия', shelf_russian: 'Русская проза', shelf_design: 'Дизайн',
+    shelf_psychology: 'Психология', shelf_articles: 'Статьи', shelf_mine: 'Мои файлы',
+    read: 'Читать', listen: 'Слушать', timer: 'Таймер', off: 'Выкл', endChapter: 'До конца главы', sleepTimer: 'Таймер сна', fadeNote: 'Последние 20 секунд голос плавно затихает.',
+    appearance: 'Оформление', theme: 'Тема', paper: 'Бумага', sepia: 'Сепия', night: 'Ночь', textSize: 'Размер текста', typeface: 'Шрифт', brightness: 'Яркость', lineSpacing: 'Межстрочный',
+    addTitle: 'Добавить в библиотеку', paste: 'Вставить текст', file: 'Файл', url: 'По ссылке', pasteHint: 'Вставьте любой текст — статью, заметки, главу…', titleOpt: 'Название (необязательно)',
+    fileHint: 'TXT, PDF или EPUB', choose: 'Выбрать файл', urlHint: 'https://… адрес статьи', importBtn: 'На полку', shelf: 'Полка', importing: 'Импорт…', fetching: 'Загружаю статью…',
+    urlFail: 'Не удалось загрузить страницу. Некоторые сайты закрыты — скопируйте текст и используйте «Вставить текст».', fileFail: 'Не удалось прочитать файл.', emptyText: 'Здесь нет текста для чтения.', added: 'Добавлено на полку',
+    contents: 'Содержание', bookmarks: 'Закладки', noBookmarks: 'Закладок пока нет — нажмите на ленточку во время чтения.', focus: 'Режим фокуса', bilingual: 'Два языка', translateTo: 'Перевод на', readBoth: 'Читать оригинал, затем перевод',
+    skipFiller: 'Пропуск «воды»', skipFillerHint: 'Ссылки, сноски и номера страниц не озвучиваются', voice: 'Голос', speed: 'Скорость', engine: 'Движок', neural: 'Нейро', device: 'Телефон', neuralHint: 'Нейроголоса Microsoft · точная подсветка слов', deviceHint: 'Голоса телефона (Siri на iPhone)',
+    neuralOff: 'Нейроголоса сейчас недоступны — включены голоса телефона.', listenFrom: 'Слушать отсюда', saveQuote: 'Сохранить цитату', copy: 'Копировать', translate: 'Перевести', quoteSaved: 'Цитата сохранена', copied: 'Скопировано',
+    quotes: 'Цитаты', noQuotes: 'Нажмите на любое предложение при чтении и выберите «Сохранить цитату».', share: 'Поделиться', delete: 'Удалить', stats: 'Ваше чтение', minListened: 'мин прослушано', minRead: 'мин прочитано', streak: 'дней подряд', dayStreak: 'Дней подряд', thisWeek: 'Эта неделя', totalBooks: 'книг на полках', quotesSaved: 'цитат',
+    chapterOf: 'из', nextChapter: 'Следующая глава', loadingVoices: 'Загружаю голоса…', recommended: 'Рекомендуем', translating: 'Перевожу…', translationFail: 'Перевод сейчас недоступен.',
+    deleteBook: 'Удалить из библиотеки', confirmDelete: 'Удалить эту книгу?', language: 'Язык', settings: 'Настройки', relay: 'Сервер голосов', relayHint: 'Необязательно. Адрес сервера Murmur (relay/relay.py) — открывает 300+ нейроголосов для любого текста.', online: 'Онлайн', offline: 'Офлайн', bookmarkAdded: 'Закладка добавлена', bookmarkRemoved: 'Закладка удалена', end: 'Конец',
+    timerDone: 'Таймер сна сработал', alignment: 'Выравнивание', justify: 'По ширине', alignLeft: 'По левому краю', searchVoices: 'Поиск голоса или языка', neuralSamples: 'книги-примеры уже озвучены; для своих текстов нужен сервер (сейчас офлайн), пока читают голоса телефона.', neuralOffBook: 'Для своих текстов нейроголосам нужен сервер — сейчас читают голоса телефона.', words: 'слов', min: 'мин', sample: 'Пример', cancel: 'Отмена', done: 'Готово', today: 'Сегодня', original: 'Оригинал'
+  }
+};
+let lang = localStorage.getItem('murmur:ui') || ((navigator.language || 'en').startsWith('ru') ? 'ru' : 'en');
+export const t = k => (D[lang] && D[lang][k]) || D.en[k] || k;
+export const uiLang = () => lang;
+export function setUiLang(l) { lang = l; localStorage.setItem('murmur:ui', l); document.documentElement.lang = l; }
+export function plural(n) {
+  if (lang === 'ru') { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? 'книга' : (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? 'книги' : 'книг'); }
+  return n === 1 ? 'book' : 'books';
+}

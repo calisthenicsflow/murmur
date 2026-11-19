@@ -1,0 +1,19 @@
+// Murmur service worker — versioned app-shell cache + runtime font cache.
+const VERSION = '1.0.0';
+const SHELL = `murmur-shell-${VERSION}`, FONTS = 'murmur-fonts-v1';
+const ASSETS = ['./', 'index.html', 'css/app.css?v=1.0.0', 'js/app.js?v=1.0.0', 'js/db.js', 'js/i18n.js', 'js/text.js', 'js/covers.js', 'js/engines.js', 'js/player.js', 'js/translate.js', 'js/stats.js', 'js/quotes.js', 'js/importers.js', 'js/samples.js',
+  'vendor/pdf.min.js', 'vendor/pdf.worker.min.js', 'vendor/jszip.min.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'audio/index.json', 'config.json'];
+self.addEventListener('install', e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('murmur-shell-') && k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('fetch', e => {
+  const u = new URL(e.request.url);
+  if (e.request.method !== 'GET') return;
+  if (u.hostname === 'fonts.googleapis.com' || u.hostname === 'fonts.gstatic.com') {
+    e.respondWith(caches.open(FONTS).then(async c => { const hit = await c.match(e.request); if (hit) return hit; const r = await fetch(e.request); if (r.ok || r.type === 'opaque') c.put(e.request, r.clone()); return r; }));
+    return;
+  }
+  if (u.origin !== location.origin) return;
+  if (/\/(version|config)\.json$/.test(u.pathname)) { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); return; }
+  if (e.request.mode === 'navigate') { e.respondWith(fetch(e.request).then(r => { caches.open(SHELL).then(c => c.put('index.html', r.clone())); return r; }).catch(() => caches.match('index.html'))); return; }
+  e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request).then(r => { if (r.ok) { const cl = r.clone(); caches.open(SHELL).then(c => c.put(e.request, cl)); } return r; })));
+});
