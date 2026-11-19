@@ -1,5 +1,5 @@
 // Importers: plain text, PDF (pdf.js), EPUB (JSZip), web article (r.jina.ai reader).
-import { splitSections, detectLang, wc } from './text.js?v=1.2.1';
+import { splitSections, detectLang, wc } from './text.js?v=1.2.2';
 
 const loadScript = src => new Promise((res, rej) => {
   if (document.querySelector(`script[src="${src}"]`)) return res();
@@ -18,14 +18,22 @@ export function fromText(text, title) {
   return { title: t, lang: detectLang(text), sections };
 }
 
-export async function fromPDF(file) {
+export async function openPDF(data) {
   await loadScript('vendor/pdf.min.js');
   const pdfjs = window.pdfjsLib; pdfjs.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
-  const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  try { return await pdfjs.getDocument({ data, isEvalSupported: false }).promise; }
+  catch (e) { if (/password/i.test(e && (e.name + e.message))) { const er = new Error('drm'); er.code = 'drm'; er.fmt = 'PDF (password)'; throw er; } throw e; }
+}
+export async function fromPDF(file, name = file.name || 'Book') {
+  const pdf = await openPDF(await file.arrayBuffer());
   const meta = await pdf.getMetadata().catch(() => ({}));
-  const pages = [];
-  for (let i = 1; i <= Math.min(pdf.numPages, 400); i++) {
+  const metaTitle = (meta.info && meta.info.Title && meta.info.Title.trim()) || '';
+  const pages = []; let chars = 0;
+  for (let i = 1; i <= Math.min(pdf.numPages, 1500); i++) {
     const page = await pdf.getPage(i), tc = await page.getTextContent();
+    chars += tc.items.reduce((a, it) => a + (it.str ? it.str.trim().length : 0), 0);
+    // scanned book (pages are pictures): hand over to OCR instead of returning nothing
+    if (i === Math.min(pdf.numPages, 6) && chars < 40 * i && (pdf.numPages <= 12 || await pdf.getPage(Math.ceil(pdf.numPages / 2)).then(p => p.getTextContent()).then(c => c.items.reduce((a, it) => a + (it.str ? it.str.trim().length : 0), 0) < 60))) { const pages = pdf.numPages; pdf.destroy(); return { scanned: true, pages, title: metaTitle || name.replace(/\.pdf$/i, '').replace(/[_]+/g, ' '), titleFromName: !metaTitle, author: meta.info?.Author || '' }; }
     // group items into lines by baseline
     const lines = []; let cur = null;
     for (const it of tc.items) {
@@ -50,30 +58,37 @@ export async function fromPDF(file) {
     pages.push(txt);
   }
   const text = pages.join('\n\n');
-  const title = (meta.info && meta.info.Title && meta.info.Title.trim()) || file.name.replace(/\.pdf$/i, '');
+  pdf.destroy();
+  const title = metaTitle || name.replace(/\.pdf$/i, '');
   return { title, author: meta.info?.Author || '', lang: detectLang(text), sections: splitSections(text, title) };
 }
 
-export async function fromEPUB(file) {
-  await loadScript('vendor/jszip.min.js');
-  const zip = await window.JSZip.loadAsync(await file.arrayBuffer());
+export async function fromEPUB(src, name = src.name || 'Book') {
+  let zip = src;
+  if (!src.files) { await loadScript('vendor/jszip.min.js'); zip = await window.JSZip.loadAsync(await src.arrayBuffer()); }
   const P = new DOMParser();
-  const container = P.parseFromString(await zip.file('META-INF/container.xml').async('string'), 'application/xml');
-  const opfPath = container.querySelector('rootfile').getAttribute('full-path');
+  let opfPath = '';
+  const cf = zip.file('META-INF/container.xml');
+  if (cf) opfPath = P.parseFromString(await cf.async('string'), 'application/xml').querySelector('rootfile')?.getAttribute('full-path') || '';
+  if (!opfPath || !zip.file(opfPath)) opfPath = Object.keys(zip.files).find(f => /\.opf$/i.test(f)) || '';
+  if (!opfPath) throw new Error('empty');
   const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
   const opf = P.parseFromString(await zip.file(opfPath).async('string'), 'application/xml');
   const q = n => opf.getElementsByTagName(n)[0]?.textContent?.trim() || '';
-  const title = q('dc:title') || file.name.replace(/\.epub$/i, ''), author = q('dc:creator'), lang = (q('dc:language') || '').split(/[-_]/)[0].toLowerCase();
+  const title = q('dc:title') || name.replace(/\.(kepub\.epub|epub|ibooks)$/i, ''), author = q('dc:creator'), lang = (q('dc:language') || '').split(/[-_]/)[0].toLowerCase();
   const manifest = {}; for (const it of opf.getElementsByTagName('item')) manifest[it.getAttribute('id')] = it.getAttribute('href');
   const sections = [];
   for (const ref of opf.getElementsByTagName('itemref')) {
     const href = manifest[ref.getAttribute('idref')]; if (!href) continue;
-    const f = zip.file(decodeURIComponent(base + href)); if (!f) continue;
-    const doc = P.parseFromString(await f.async('string'), 'application/xhtml+xml');
+    const f = zip.file(decodeURIComponent(base + href).replace(/[^/]+\/\.\.\//g, '')) || zip.file(base + href); if (!f) continue;
+    const src = await f.async('string');
+    let doc = P.parseFromString(src, 'application/xhtml+xml');
+    if (doc.querySelector('parsererror')) doc = P.parseFromString(src, 'text/html'); // sloppy XHTML (common in .kepub / converted books)
     const body = doc.body || doc.documentElement;
     body.querySelectorAll('script,style,sup a[href],nav').forEach(n => n.remove());
     const head = body.querySelector('h1,h2,h3');
-    const paras = [...body.querySelectorAll('p,h4,h5,blockquote,li')].map(p => p.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    let paras = [...body.querySelectorAll('p,h4,h5,blockquote,li')].map(p => p.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    if (!paras.length) paras = [...body.querySelectorAll('div')].filter(d => !d.querySelector('div,p')).map(d => d.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean); // div-only books
     if (wc(paras.join(' ')) < 8) continue;
     const ht = head ? head.textContent.replace(/\s+/g, ' ').trim() : '';
     const parts = splitSections(paras.join('\n\n'), ht);
@@ -97,7 +112,12 @@ export async function fromURL(url) {
   if (!r || !r.ok) throw new Error('reader ' + (r ? r.status : 'network'));
   const raw = await r.text();
   const title = (raw.match(/^Title:\s*(.+)$/m) || [])[1] || new URL(url).hostname;
-  let md = raw.split(/^Markdown Content:\s*$/m)[1] || raw;
+  const md = raw.split(/^Markdown Content:\s*$/m)[1] || raw;
+  const text = mdToText(md, true);
+  if (wc(text) < 30) throw new Error('empty');
+  return { title: title.trim(), author: new URL(url).hostname.replace(/^www\./, ''), lang: detectLang(text), source: url, sections: splitSections(text, title.trim()) };
+}
+export function mdToText(md, strict) {
   md = md
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')                 // images
     .replace(/\[([^\]]*)\]\((?:[^()]|\([^)]*\))*\)/g, '$1') // links → text
@@ -106,8 +126,6 @@ export async function fromURL(url) {
     .replace(/[*_`]{1,3}([^*_`]+)[*_`]{1,3}/g, '$1')
     .replace(/^[=\-_*]{3,}\s*$/gm, '')
     .replace(/^\|.*\|$/gm, '');
-  const paras = md.split(/\n\s*\n/).map(p => p.replace(/\s+/g, ' ').trim()).filter(p => wc(p) > 3 || /[.!?。！？]$/.test(p));
-  if (wc(paras.join(' ')) < 30) throw new Error('empty');
-  const text = paras.join('\n\n');
-  return { title: title.trim(), author: new URL(url).hostname.replace(/^www\./, ''), lang: detectLang(text), source: url, sections: splitSections(text, title.trim()) };
+  const paras = md.split(/\n\s*\n/).map(p => p.replace(/\s+/g, ' ').trim()).filter(p => strict ? (wc(p) > 3 || /[.!?。！？]$/.test(p)) : p);
+  return paras.join('\n\n');
 }

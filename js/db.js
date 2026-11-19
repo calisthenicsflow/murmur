@@ -1,5 +1,5 @@
 // Tiny IndexedDB wrapper with a localStorage fallback.
-const DB_NAME = 'murmur', DB_VER = 1, STORES = ['books', 'quotes', 'kv'];
+const DB_NAME = 'murmur', DB_VER = 2, STORES = ['books', 'quotes', 'kv', 'files'];
 let dbp = null;
 function open() {
   if (dbp) return dbp;

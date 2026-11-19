@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.2.1';
+import { db } from './db.js?v=1.2.2';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.2.1';
-import { coverSVG, autoCover } from './covers.js?v=1.2.1';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.2.1';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.2.1';
-import { Player } from './player.js?v=1.2.1';
-import { translateMany } from './translate.js?v=1.2.1';
-import { track, summary } from './stats.js?v=1.2.1';
-import { renderCard, shareCard } from './quotes.js?v=1.2.1';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.2.1';
-import { SAMPLES } from './samples.js?v=1.2.1';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.2.2';
+import { coverSVG, autoCover } from './covers.js?v=1.2.2';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.2.2';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.2.2';
+import { Player } from './player.js?v=1.2.2';
+import { translateMany } from './translate.js?v=1.2.2';
+import { track, summary } from './stats.js?v=1.2.2';
+import { renderCard, shareCard } from './quotes.js?v=1.2.2';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.2.2';
+import { SAMPLES } from './samples.js?v=1.2.2';
 
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.2.2';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -122,7 +122,7 @@ function renderLibrary() {
   $('#shelves').innerHTML = groups.map((g, gi) => `
     <div class="shelf" style="--g:${g.g};--g2:${g.g2};animation-delay:${.1 + gi * .08}s" data-shelf="${g.id}">
       <div class="shelf-head"><h2>${esc(shelfName(g.id))}</h2><div class="shelf-nav"><span class="count">${g.books.length} ${plural(g.books.length)}</span><button data-dir="-1" aria-label="Scroll left">${ICON.left}</button><button data-dir="1" aria-label="Scroll right">${ICON.right}</button></div></div>
-      <div class="shelf-row">${g.books.map(b => `<div class="book" data-open="${b.id}" style="height:auto"><div class="cv" style="height:${150 + (parseInt(b.id.replace(/\D/g, '').slice(-2) || '7', 10) % 3) * 7 + (b.sample ? b.title.length % 13 : 0)}px">${coverSVG(b)}${b.sample ? '' : ''}${bookProgress(b) > 0 ? `<i class="prog" style="width:${bookProgress(b) * 100}%"></i>` : ''}</div></div>`).join('')}
+      <div class="shelf-row">${g.books.map(b => `<div class="book" data-open="${b.id}" style="height:auto"><div class="cv" style="height:${150 + (parseInt(b.id.replace(/\D/g, '').slice(-2) || '7', 10) % 3) * 7 + (b.sample ? b.title.length % 13 : 0)}px">${coverSVG(b)}${b.sample ? '' : ''}${bookProgress(b) > 0 ? `<i class="prog" style="width:${bookProgress(b) * 100}%"></i>` : ''}${b.ocr && b.ocr.state !== 'done' ? `<em class="ocr-badge">OCR ${b.ocr.done}/${b.ocr.total}</em>` : ''}</div></div>`).join('')}
         ${g.id === 'mine' ? `<div class="book add" data-add="1"><div class="cv"><span>${ICON.plus}${esc(t('addBooks'))}</span></div></div>` : ''}</div>
       <div class="glass"><i class="screw l" style="--r:${20 + gi * 37}deg"></i><i class="screw r" style="--r:${70 + gi * 23}deg"></i></div>
     </div>`).join('');
@@ -151,7 +151,7 @@ function bookMenu(id) {
     <div class="row" data-a="open"><div class="ic">${ICON.headph}</div><div class="tx"><b>${t('read')} / ${t('listen')}</b><small>${esc(b.author || '')}</small></div></div>
     <div class="row danger" data-a="del"><div class="ic">${ICON.trash}</div><div class="tx"><b>${t('deleteBook')}</b></div></div>`, body => {
     body.querySelector('[data-a=open]').onclick = () => { closeSheet(); openBook(id); };
-    body.querySelector('[data-a=del]').onclick = async () => { await db.del('books', id); S.books = S.books.filter(x => x.id !== id); closeSheet(); renderLibrary(); toast('✓'); };
+    body.querySelector('[data-a=del]').onclick = async () => { if (OCR) OCR.cancelOCR(id); await db.del('files', id); await db.del('books', id); S.books = S.books.filter(x => x.id !== id); closeSheet(); renderLibrary(); toast('✓'); };
   });
 }
 $('#btnAdd').onclick = () => openAdd();
@@ -196,8 +196,9 @@ function openAdd(tab = 'paste') {
         if (tab === 'paste') { const txt = body.querySelector('#addText').value.trim(); if (wc(txt) < 3) throw new Error('empty'); r = fromText(txt, body.querySelector('#addTitle').value.trim()); }
         else if (tab === 'file') {
           if (!fileObj) throw new Error('nofile');
-          const n = fileObj.name.toLowerCase();
-          r = n.endsWith('.pdf') ? await fromPDF(fileObj) : n.endsWith('.epub') ? await fromEPUB(fileObj) : fromText(await fileObj.text(), fileObj.name.replace(/\.\w+$/, ''));
+          const { importFile } = await import('./formats.js?v=' + APP_VERSION); // format libs load only when needed
+          r = await importFile(fileObj);
+          if (r.scanned) { await startScanned(r, fileObj, shelf, body, go); return; }
         } else { const u = body.querySelector('#addUrl').value.trim(); if (!u) throw new Error('nourl'); r = await fromURL(u); }
         if (!r.sections || !r.sections.length || !r.sections.some(s => wc(s.text) > 2)) throw new Error('empty');
         const book = { id: 'u-' + uid(), title: r.title || 'Untitled', author: r.author || '', lang: r.lang || detectLang(r.sections.slice(0, 3).map(x => x.text).join('\n\n')), lv: 2, shelf, sections: r.sections, source: r.source || '', createdAt: Date.now() };
@@ -207,10 +208,71 @@ function openAdd(tab = 'paste') {
         setTimeout(() => openBook(book.id), 450);
       } catch (e) {
         console.warn('import failed', e);
-        err.textContent = e.message === 'empty' ? t('emptyText') : tab === 'url' ? t('urlFail') : tab === 'file' ? (e.message === 'nofile' ? t('fileHint') : t('fileFail')) : t('emptyText');
+        err.textContent = e.message === 'empty' ? t('emptyText') : tab === 'url' ? t('urlFail') : tab === 'file' ? (e.message === 'nofile' ? t('fileHint') : importErr(e, fileObj)) : t('emptyText');
       } finally { go.disabled = false; lbl.textContent = t('importBtn'); }
     };
   });
+}
+
+function importErr(e, f) {
+  const code = e.code || e.message, fmt = e.fmt || ((f?.name || '').match(/\.([a-z0-9]{1,5})$/i)?.[1] || '').toUpperCase();
+  const k = { drm: 'errDRM', mobiHuff: 'errHuff', djvu: 'errDjvu', comic: 'errComic', oldDoc: 'errOldDoc', image: 'errImage', unsupported: 'errUnsupported', broken: 'errBroken' }[code];
+  return (k ? t(k) : t('fileFail') + (fmt ? ` (${fmt})` : '')).replace('{fmt}', fmt || t('thisFile'));
+}
+
+/* ------------------------------ scanned PDFs → OCR ------------------------------ */
+let OCR = null; const ocrMod = async () => OCR || (OCR = await import('./ocr.js?v=' + APP_VERSION));
+async function startScanned(r, file, shelf, body, go) {
+  const o = await ocrMod();
+  const book = { id: 'u-' + uid(), title: r.title || 'Untitled', author: r.author || '', lang: uiLang() === 'ru' ? 'ru' : 'en', lv: 2, shelf, sections: [], createdAt: Date.now(),
+    ocr: { total: r.pages, done: 0, state: 'queued', titleAuto: !!r.titleFromName, langs: o.ocrLangs(uiLang(), navigator.languages || []) } };
+  book.cover = autoCover(book.title + book.id);
+  await db.set('files', book.id, file);
+  await db.set('books', book.id, book); S.books.unshift(book); renderLibrary();
+  // progress inside the sheet until the first page with text is ready, then open the book; OCR continues
+  const err = body.querySelector('#addErr'); go.style.display = 'none';
+  err.innerHTML = `<div class="ocr-box"><b>${t('scanned')}</b><small>${t('scannedHint')}</small><div class="ocr-bar"><i id="ocrBarSheet"></i></div><div class="ocr-row"><span id="ocrTxtSheet">${t('ocrLoading')}</span><button id="ocrCancelSheet">${t('cancel')}</button></div></div>`;
+  err.classList.add('neutral');
+  body.querySelector('#ocrCancelSheet').onclick = async () => { o.cancelOCR(book.id); if (!book.sections.length) { await deleteBook(book.id); } closeSheet(); };
+  let opened = false;
+  const off = o.onOCR((b, x) => {
+    if (b.id !== book.id) return;
+    const el = document.getElementById('ocrTxtSheet'); if (el) el.textContent = ocrLabel(b, x);
+    const bar = document.getElementById('ocrBarSheet'); if (bar) bar.style.width = ocrPct(b, x) + '%';
+    if (!opened && b.sections.length && (x.added || b.ocr.state !== 'running')) { opened = true; off(); closeSheet(); toast(t('added')); setTimeout(() => openBook(b.id), 400); }
+  });
+  ensureOCRListener(); o.runOCR(book);
+}
+const ocrPct = (b, x = {}) => Math.min(100, ((b.ocr.done + (x.pageProgress || 0)) / b.ocr.total) * 100);
+const ocrLabel = (b, x = {}) => b.ocr.state === 'error' ? t('ocrError') : b.ocr.state === 'paused' ? t('ocrPaused').replace('{n}', b.ocr.done).replace('{t}', b.ocr.total) : b.ocr.done === 0 && !x.pageProgress ? t('ocrLoading') : t('ocrProgress').replace('{n}', Math.min(b.ocr.total, b.ocr.done + 1)).replace('{t}', b.ocr.total);
+let ocrListening = false;
+async function ensureOCRListener() {
+  if (ocrListening) return; ocrListening = true;
+  const o = await ocrMod();
+  o.onOCR((b, x) => {
+    // first recognised page decides the language (and so the voice)
+    if (x.added && b.sections.length === 1 && !b.langManual) { b.lang = detectLang(b.sections[0].text) || b.lang; db.set('books', b.id, b); if (S.book && S.book.id === b.id) { S.model && renderSection(S.curW > 0 ? S.curW : 0, false); syncVoice(); } }
+    if (x.titled) { b.cover = autoCover(b.title + b.id); db.set('books', b.id, b); renderLibrary(); if (S.book && S.book.id === b.id) { $('#rdMini').textContent = b.title; if (!S.book.sections[S.sec]?.title || true) $('#rdTitle').textContent = b.title; } }
+    if (S.book && S.book.id === b.id) { S.book = b; updateOCRPill(b, x); if (x.added) { updateNextBtn(); if (S.waitNext && S.sec < b.sections.length - 1) { S.waitNext = false; gotoSection(S.sec + 1, true); } } }
+    if (b.ocr.state === 'done' && !x.page) toast(t('ocrDone'));
+  });
+}
+function updateOCRPill(b = S.book, x = {}) {
+  const pill = $('#ocrPill'); if (!pill) return;
+  const on = b && b.ocr && b.ocr.state !== 'done';
+  pill.classList.toggle('show', !!on); if (!on) return;
+  pill.querySelector('span').textContent = ocrLabel(b, x);
+  pill.querySelector('i').style.width = ocrPct(b, x) + '%';
+  const running = b.ocr.state === 'running' || b.ocr.state === 'queued';
+  pill.querySelector('button').innerHTML = running ? ICON.x : ICON.play;
+  pill.querySelector('button').setAttribute('aria-label', running ? t('cancel') : t('ocrResume'));
+}
+async function deleteBook(id) { await db.del('books', id); await db.del('files', id); S.books = S.books.filter(x => x.id !== id); renderLibrary(); }
+function updateNextBtn() {
+  const b = S.book; if (!b) return; const last = S.sec >= b.sections.length - 1;
+  const waiting = last && b.ocr && b.ocr.state !== 'done';
+  $('#rdNext').innerHTML = waiting ? `<div class="end">${t('ocrWaiting')}</div>` : last ? `<div class="end">— ${t('end')} —</div>` : `<button id="nextSec">${t('nextChapter')} ${ICON.right}</button>`;
+  $('#nextSec') && ($('#nextSec').onclick = () => gotoSection(S.sec + 1, false));
 }
 
 /* ------------------------------ sheets ------------------------------ */
@@ -236,6 +298,8 @@ $('#scrim').onclick = () => closeSheet();
 /* ------------------------------ reader ------------------------------ */
 async function openBook(id, autoplay = false) {
   const b = S.books.find(x => x.id === id); if (!b) return;
+  if (!b.sections.length) { toast(b.ocr ? ocrLabel(b) : t('emptyText')); if (b.ocr && b.ocr.state !== 'running') { ensureOCRListener(); (await ocrMod()).runOCR(b); } return; }
+  S.waitNext = false;
   S.book = b; b.openedAt = Date.now();
   if (!b.sample && !b.langManual && b.lv !== 2) { b.lang = detectLang(b.sections.slice(0, 3).map(x => x.text).join('\n\n')) || b.lang; b.lv = 2; }
   db.set('books', b.id, b);
@@ -279,9 +343,7 @@ function renderSection(startWord = 0, scroll = true) {
   art.classList.toggle('bi', prefs.bi);
   // translations arrive asynchronously and shift the layout; keep the floating highlight glued to its word
   if (!art._ro && window.ResizeObserver) { let raf = 0; art._ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => positionHL(true)); }); art._ro.observe(art); }
-  const last = S.sec >= b.sections.length - 1;
-  $('#rdNext').innerHTML = last ? `<div class="end">— ${t('end')} —</div>` : `<button id="nextSec">${t('nextChapter')} ${ICON.right}</button>`;
-  $('#nextSec') && ($('#nextSec').onclick = () => gotoSection(S.sec + 1, false));
+  updateNextBtn(); updateOCRPill(b);
   const sw = Math.min(startWord, words.length - 1);
   setCurrent(Math.max(0, sw), false);
   if (scroll) requestAnimationFrame(() => { if (sw > 0) scrollToWord(sw, false); else $('#rdScroll').scrollTop = 0; });
@@ -513,6 +575,7 @@ player.on.state = () => {
 player.on.end = () => {
   if (S.timer && S.timer.endOfChapter) { stopTimer(true); return; }
   if (S.book && S.sec < S.book.sections.length - 1) { gotoSection(S.sec + 1, true); }
+  else if (S.book && S.book.ocr && S.book.ocr.state === 'running') { S.waitNext = true; toast(t('ocrWaiting')); }
   else { toast(t('end')); }
 };
 player.on.error = e => {
@@ -930,6 +993,10 @@ async function boot() {
   applyLook(); applyI18n();
   history.replaceState({ screen: 'library' }, '');
   await loadBooks(); renderLibrary();
+  // an OCR job interrupted by closing the app continues where it stopped (pages already done are kept)
+  const pend = S.books.find(b => b.ocr && (b.ocr.state === 'running' || b.ocr.state === 'queued') && b.ocr.done < b.ocr.total);
+  if (pend) { ensureOCRListener(); ocrMod().then(o => o.runOCR(pend)); }
+  $('#ocrPill button').onclick = async () => { const b = S.book; if (!b || !b.ocr) return; const o = await ocrMod(); ensureOCRListener(); if (o.ocrRunning(b.id)) { o.cancelOCR(b.id); } else { b.ocr.state = 'queued'; updateOCRPill(b); o.runOCR(b); } };
   try { const c = await fetch('config.json', { cache: 'no-store' }).then(r => r.json()); S.cfgRelay = c.relay || ''; } catch {}
   checkRelay().then(() => { if (S.book) syncVoice(); });
   device.voices().then(v => { S.deviceVoices = v; });
