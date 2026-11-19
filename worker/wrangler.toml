@@ -1,0 +1,6 @@
+name = "murmur-tts"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+account_id = "d41ffa738c08d2a728185b8e7b01a753"
