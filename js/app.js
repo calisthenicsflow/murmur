@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.2.2';
+import { db } from './db.js?v=1.2.3';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.2.2';
-import { coverSVG, autoCover } from './covers.js?v=1.2.2';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.2.2';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.2.2';
-import { Player } from './player.js?v=1.2.2';
-import { translateMany } from './translate.js?v=1.2.2';
-import { track, summary } from './stats.js?v=1.2.2';
-import { renderCard, shareCard } from './quotes.js?v=1.2.2';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.2.2';
-import { SAMPLES } from './samples.js?v=1.2.2';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.2.3';
+import { coverSVG, autoCover } from './covers.js?v=1.2.3';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.2.3';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.2.3';
+import { Player } from './player.js?v=1.2.3';
+import { translateMany } from './translate.js?v=1.2.3';
+import { track, summary } from './stats.js?v=1.2.3';
+import { renderCard, shareCard } from './quotes.js?v=1.2.3';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.2.3';
+import { SAMPLES } from './samples.js?v=1.2.3';
 
-export const APP_VERSION = '1.2.2';
+export const APP_VERSION = '1.2.3';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -73,7 +73,8 @@ function applyLook() {
   r.setProperty('--fs', prefs.fs + 'px'); r.setProperty('--lh', lhEff);
   r.setProperty('--serif', { literata: "'Literata', Georgia, serif", source: "'Source Serif 4', Georgia, serif", inter: "'Inter', system-ui, sans-serif" }[prefs.font]);
   $('#dim').style.opacity = prefs.dim;
-  document.body.classList.toggle('align-left', prefs.align === 'left' || prefs.fs >= 28); // justify makes huge gaps in a narrow column at big sizes
+  document.body.classList.toggle('align-left', prefs.align === 'left' || prefs.fs >= 28);
+  document.body.classList.toggle('big-type', prefs.fs >= 28); // smaller drop cap so long first words still fit beside it // justify makes huge gaps in a narrow column at big sizes
   const tc = { paper: '#EFEDEA', sepia: '#F2E8D6', night: '#131315' }[prefs.theme];
   $('meta[name=theme-color]').setAttribute('content', tc);
   requestAnimationFrame(() => positionHL(true));
@@ -314,6 +315,15 @@ async function openBook(id, autoplay = false) {
 function leaveReader() { player.stop(); savePos(); hidePop(); $('#focus').classList.remove('show'); updateMediaSession(); }
 $('#rdBack').onclick = () => history.back();
 
+// a drop cap only suits a prose opening: not a contents page ("Единство и множество 08-13 …"),
+// a list of numbers, or a paragraph starting with a digit/quote/bracket (OCR'd tables of contents
+// and front matter especially)
+function dropCapOK(p, sents, words) {
+  const ws = p.sents.flatMap(s => sents[s].words.map(w => words[w].t));
+  if (!ws.length || !/^\p{L}/u.test(ws[0])) return false;
+  const nums = ws.filter(t => /\d/.test(t)).length;
+  return nums <= Math.max(1, ws.length * 0.08) && ws.length >= 6;
+}
 function renderSection(startWord = 0, scroll = true) {
   const b = S.book, sec = b.sections[S.sec];
   S.model = buildModel(sec.text, b.lang, prefs.skip);
@@ -326,10 +336,12 @@ function renderSection(startWord = 0, scroll = true) {
   let html = '', first = true;
   for (const p of paras) {
     if (!p.sents.length) continue;
-    html += `<p class="${first && !p.skip ? 'first' : ''}${p.skip ? ' skip' : ''}">`;
+    const dc = first && !p.skip && dropCapOK(p, sents, words);
+    html += `<p class="${dc ? 'first' : ''}${p.skip ? ' skip' : ''}">`;
     first = false;
+    const firstW = sents[p.sents[0]].words[0];
     for (const s of p.sents) {
-      html += `<span class="s" data-s="${s}">` + sents[s].words.map(w => `<span class="w${words[w].say ? '' : ' sk'}${/^\(?(https?:|www\.)/i.test(words[w].t) ? ' u' : ''}" data-w="${w}">${esc(words[w].t)}</span>`).map((h, k) => h + (words[sents[s].words[k]].ns ? '' : ' ')).join('').trimEnd() + '</span>';
+      html += `<span class="s" data-s="${s}">` + sents[s].words.map(w => `<span class="w${dc && w === firstW ? ' dcw' : ''}${words[w].say ? '' : ' sk'}${/^\(?(https?:|www\.)/i.test(words[w].t) ? ' u' : ''}" data-w="${w}">${esc(words[w].t)}</span>`).map((h, k) => h + (words[sents[s].words[k]].ns ? '' : ' ')).join('').trimEnd() + '</span>';
       html += `<span class="tr${tr[s] ? '' : ' load'}" data-t="${s}">${tr[s] ? trHtml(tr[s]) : '·'}</span> `;
     }
     html += '</p>';
@@ -378,23 +390,50 @@ function setCurrent(w, fromPlayer) {
   if (prefs.focus) focusWord(w);
   if (fromPlayer) autoScroll(w);
 }
+// rect of a word's own glyphs. The first word of a drop-cap paragraph carries the floated
+// ::first-letter; engines disagree on whether the element's box includes that float (WebKit can
+// return a box spanning the whole drop cap), so measure the text after the first letter with a Range.
+function wordRect(el) {
+  if (el.classList.contains('dcw') && getComputedStyle(el.closest('p'), '::first-letter').float !== 'none') { // only a floated cap (not bilingual / big type)
+    const tn = el.firstChild;
+    if (tn && tn.nodeType === 3 && tn.length > 1) {
+      const rg = document.createRange(); rg.setStart(tn, 1); rg.setEnd(tn, tn.length);
+      const rs = rg.getClientRects(); if (rs.length) return { rects: rs, box: rg.getBoundingClientRect() };
+    }
+  }
+  return { rects: el.getClientRects(), box: el.getBoundingClientRect() };
+}
+let hlLast = null; // last placement, relative to #rdText: {x, y, w, h, el}
 function positionHL(instant) {
   const hl = $('#hl'); if (!hl) return;
   const el = (S.trEl && S.trEl.isConnected && S.trEl) || S.wordEls[S.curW];
-  const active = S.mode === 'listen' && (player.playing || player.paused) && el;
-  if (!active) { hl.classList.remove('on'); return; }
+  const active = S.mode === 'listen' && (player.playing || player.paused) && el && el.isConnected;
+  if (!active) { hl.classList.remove('on'); hlLast = null; return; }
   // a word broken across two lines (hyphenation) would make one huge box over both lines:
   // paint that word inline instead and park the floating box
   $$('#rdText .split').forEach(x => x !== el && x.classList.remove('split'));
-  if (el.getClientRects().length > 1) { el.classList.add('split'); hl.classList.remove('on'); return; }
+  const { rects, box: r } = wordRect(el);
+  if (rects.length > 1) { el.classList.add('split'); hl.classList.remove('on'); hlLast = null; return; }
   el.classList.remove('split');
-  const art = $('#rdText').getBoundingClientRect(), r = el.getBoundingClientRect();
-  if (instant) hl.style.transition = 'none';
-  hl.style.transform = `translate(${r.left - art.left - 3}px, ${r.top - art.top - 1}px)`;
-  hl.style.width = r.width + 6 + 'px'; hl.style.height = r.height + 2 + 'px';
+  if (!r.width && !r.height) return; // not laid out (hidden / detached) — the watchdog retries
+  const art = $('#rdText').getBoundingClientRect();
+  const x = r.left - art.left - 3, y = r.top - art.top - 1, w = r.width + 6, h = r.height + 2;
+  if (hlLast && hlLast.el === el && Math.abs(hlLast.x - x) < .5 && Math.abs(hlLast.y - y) < .5 && Math.abs(hlLast.w - w) < .5 && Math.abs(hlLast.h - h) < .5 && hl.classList.contains('on')) return;
+  // gliding is only for the next word on the same line; moving to another line (or out of a
+  // hidden state, or after a reflow of the same word) jumps, so the box never travels diagonally
+  // across the text — that mid-flight box is what looked "misplaced" next to the drop cap
+  const jump = instant || !hlLast || !hl.classList.contains('on') || hlLast.el === el || Math.abs(hlLast.y - y) > h * 0.5;
+  if (jump) hl.style.transition = 'none';
+  hl.style.transform = `translate(${x}px, ${y}px)`;
+  hl.style.width = w + 'px'; hl.style.height = h + 'px';
   hl.classList.add('on');
-  if (instant) { hl.offsetWidth; hl.style.transition = ''; }
+  if (jump) { hl.offsetWidth; hl.style.transition = ''; }
+  hlLast = { x, y, w, h, el };
 }
+// Anything that reflows the text without resizing #rdText (a late web-font subset such as the
+// Cyrillic drop-cap face, controls hiding, OCR pages arriving, size animations) would leave the
+// box behind; while the highlight is live, re-check the word's position a few times a second.
+setInterval(() => { if (S.screen === 'reader' && S.mode === 'listen' && (player.playing || player.paused) && !document.hidden) positionHL(); }, 200);
 function scrollEl(el, smooth = true) {
   const sc = $('#rdScroll'); const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - sc.clientHeight * 0.33;
   sc.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
@@ -430,6 +469,7 @@ const savePosSoon = debounce(savePos, 1500);
 window.addEventListener('resize', () => positionHL(true));
 $('#app').addEventListener('scroll', () => { $('#app').scrollLeft = 0; $('#app').scrollTop = 0; });
 document.fonts && document.fonts.ready.then(() => positionHL(true));
+document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => requestAnimationFrame(() => positionHL(true)));
 
 function updateProgress() {
   if (!S.model) return;
@@ -1008,5 +1048,5 @@ async function boot() {
     }).catch(() => {});
   }
 }
-window.murmur = { S, prefs, player, openBook, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, positionHL, showPop };
+window.murmur = { S, prefs, player, openBook, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, positionHL, showPop };
 boot();

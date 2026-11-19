@@ -2,16 +2,16 @@
 // tesseract.js (lazy, from jsDelivr, in a Web Worker) recognises it, and every finished page is
 // saved into the book at once — so it is read/listened to while the rest is still being recognised,
 // and never recognised twice. The PDF itself waits in IndexedDB until the job is done.
-import { db } from './db.js?v=1.2.2';
-import { openPDF } from './importers.js?v=1.2.2';
-import { wc } from './text.js?v=1.2.2';
+import { db } from './db.js?v=1.2.3';
+import { openPDF } from './importers.js?v=1.2.3';
+import { wc } from './text.js?v=1.2.3';
 import { t } from './i18n.js';
 
 const TESS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/';
 const CORE = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1';
 const TLANG = { en: 'eng', ru: 'rus', uk: 'ukr', be: 'bel', de: 'deu', fr: 'fra', es: 'spa', it: 'ita', pt: 'por', pl: 'pol', nl: 'nld', cs: 'ces', sv: 'swe', fi: 'fin', tr: 'tur', kk: 'kaz', bg: 'bul', sr: 'srp' };
 export function ocrLangs(...hints) {
-  const set = new Set(['eng']);
+  const set = new Set(['rus', 'eng']); // Murmur's own languages are always in (an English UI must still read a Russian scan)
   hints.flat().filter(Boolean).forEach(h => { const l = TLANG[String(h).slice(0, 2).toLowerCase()]; if (l) set.add(l); });
   return [...set].sort((a, b) => (a === 'eng') - (b === 'eng')).join('+'); // e.g. rus+eng
 }

@@ -106,11 +106,12 @@ body[data-theme=night]::before{mix-blend-mode:screen;opacity:.09}
 .rd-orn{display:flex;align-items:center;justify-content:center;gap:8px;margin:16px 0 4px}
 .rd-orn i{width:26px;height:1px;background:var(--line);background:color-mix(in srgb,var(--ink) 25%,transparent)}
 .rd-orn b{width:5px;height:5px;transform:rotate(45deg);background:var(--accent)}
-.rd-text{position:relative;padding:16px 26px 10px;font-family:var(--serif);font-size:var(--fs);line-height:var(--lh);color:var(--ink);text-align:justify;hyphens:auto;-webkit-hyphens:auto;font-optical-sizing:auto;text-rendering:optimizeLegibility;transition:font-size .25s var(--ease)}
+.rd-text{position:relative;padding:16px 26px 10px;overflow-wrap:break-word;font-family:var(--serif);font-size:var(--fs);line-height:var(--lh);color:var(--ink);text-align:justify;hyphens:auto;-webkit-hyphens:auto;font-optical-sizing:auto;text-rendering:optimizeLegibility;transition:font-size .25s var(--ease)}
 .rd-text p{margin:0 0 .85em;text-indent:0}
 body.align-left .rd-text{text-align:left}
 .rd-text p+p{text-indent:1.4em}
 .rd-text p.first::first-letter{font-family:var(--display);font-weight:700;float:left;font-size:4.15em;line-height:.8;margin:.07em .1em 0 0;color:var(--ink);text-indent:0}
+body.big-type .rd-text p.first::first-letter{float:none;font-size:1.3em;line-height:inherit;margin:0} /* at 28px+ a floated cap squeezes long words beside it */
 .rd-text p.skip{opacity:.4}
 .rd-text .w{position:relative;z-index:1;border-radius:5px;transition:color .18s,opacity .3s}
 .rd-text .w.sk{opacity:.45;text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--ink) 30%,transparent)}
