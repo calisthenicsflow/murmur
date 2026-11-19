@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.1.0';
+import { db } from './db.js?v=1.1.1';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc } from './text.js?v=1.1.0';
-import { coverSVG, autoCover } from './covers.js?v=1.1.0';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.1.0';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.1.0';
-import { Player } from './player.js?v=1.1.0';
-import { translateMany } from './translate.js?v=1.1.0';
-import { track, summary } from './stats.js?v=1.1.0';
-import { renderCard, shareCard } from './quotes.js?v=1.1.0';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.1.0';
-import { SAMPLES } from './samples.js?v=1.1.0';
+import { buildModel, detectLang, wc } from './text.js?v=1.1.1';
+import { coverSVG, autoCover } from './covers.js?v=1.1.1';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.1.1';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.1.1';
+import { Player } from './player.js?v=1.1.1';
+import { translateMany } from './translate.js?v=1.1.1';
+import { track, summary } from './stats.js?v=1.1.1';
+import { renderCard, shareCard } from './quotes.js?v=1.1.1';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.1.1';
+import { SAMPLES } from './samples.js?v=1.1.1';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.1.1';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -267,6 +267,8 @@ function renderSection(startWord = 0, scroll = true) {
   S.sentEls = []; art.querySelectorAll('.s').forEach(el => { S.sentEls[+el.dataset.s] = el; });
   S.curW = -1; S.curS = -1;
   art.classList.toggle('bi', prefs.bi);
+  // translations arrive asynchronously and shift the layout; keep the floating highlight glued to its word
+  if (!art._ro && window.ResizeObserver) { let raf = 0; art._ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => positionHL(true)); }); art._ro.observe(art); }
   const last = S.sec >= b.sections.length - 1;
   $('#rdNext').innerHTML = last ? `<div class="end">— ${t('end')} —</div>` : `<button id="nextSec">${t('nextChapter')} ${ICON.right}</button>`;
   $('#nextSec') && ($('#nextSec').onclick = () => gotoSection(S.sec + 1, false));
@@ -630,10 +632,10 @@ function openLook(focus) {
     mark();
     body.querySelectorAll('.theme-sw').forEach(b => b.onclick = () => { prefs.theme = b.dataset.t; savePrefs(); applyLook(); body.querySelectorAll('.theme-sw').forEach(x => x.classList.toggle('on', x === b)); });
     const fs = body.querySelector('#rgFs');
-    const setFs = v => { prefs.fs = Math.max(FS_MIN, Math.min(FS_MAX, Math.round(v))); fs.value = prefs.fs; fs.style.setProperty('--p', pct(prefs.fs, FS_MIN, FS_MAX)); body.querySelector('#fsVal').textContent = prefs.fs; body.querySelectorAll('#fsSteps button').forEach(b => b.classList.toggle('on', +b.dataset.v === prefs.fs)); savePrefs(); applyLook(); keepWordInView(); };
+    const setFs = v => { prefs.fs = Math.max(FS_MIN, Math.min(FS_MAX, Math.round(v))); fs.value = prefs.fs; fs.style.setProperty('--p', pct(prefs.fs, FS_MIN, FS_MAX)); body.querySelector('#fsVal').textContent = prefs.fs; { const near = FS_STEPS.reduce((a, v) => Math.abs(v - prefs.fs) < Math.abs(a - prefs.fs) ? v : a); body.querySelectorAll('#fsSteps button').forEach(b => b.classList.toggle('on', +b.dataset.v === near)); } savePrefs(); applyLook(); keepWordInView(); };
     fs.oninput = () => setFs(+fs.value);
     body.querySelector('#fsSteps').onclick = e => { const b = e.target.closest('button'); if (b) setFs(+b.dataset.v); };
-    body.querySelectorAll('#fsSteps button').forEach(b => b.classList.toggle('on', +b.dataset.v === prefs.fs));
+    { const near = FS_STEPS.reduce((a, v) => Math.abs(v - prefs.fs) < Math.abs(a - prefs.fs) ? v : a); body.querySelectorAll('#fsSteps button').forEach(b => b.classList.toggle('on', +b.dataset.v === near)); }
     const dm = body.querySelector('#rgDim'); dm.oninput = () => { prefs.dim = +(0.55 - dm.value).toFixed(2); dm.style.setProperty('--p', pct(+dm.value, 0, .55)); savePrefs(); applyLook(); };
     body.querySelector('#sgFont').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.font = b.dataset.v; savePrefs(); applyLook(); mark(); };
     body.querySelector('#sgAl').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.align = b.dataset.v; savePrefs(); applyLook(); mark(); };

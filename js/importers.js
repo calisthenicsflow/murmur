@@ -1,5 +1,5 @@
 // Importers: plain text, PDF (pdf.js), EPUB (JSZip), web article (r.jina.ai reader).
-import { splitSections, detectLang, wc } from './text.js?v=1.1.0';
+import { splitSections, detectLang, wc } from './text.js?v=1.1.1';
 
 const loadScript = src => new Promise((res, rej) => {
   if (document.querySelector(`script[src="${src}"]`)) return res();
@@ -88,8 +88,13 @@ export async function fromEPUB(file) {
 
 export async function fromURL(url) {
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-  const r = await fetch('https://r.jina.ai/' + url);
-  if (!r.ok) throw new Error('reader ' + r.status);
+  // the free reader proxy occasionally rate-limits / hiccups: retry twice with a short backoff
+  let r;
+  for (let i = 0; i < 3; i++) {
+    try { r = await fetch('https://r.jina.ai/' + url); if (r.ok) break; } catch (e) { r = null; }
+    if (i < 2) await new Promise(res => setTimeout(res, 1200 * (i + 1)));
+  }
+  if (!r || !r.ok) throw new Error('reader ' + (r ? r.status : 'network'));
   const raw = await r.text();
   const title = (raw.match(/^Title:\s*(.+)$/m) || [])[1] || new URL(url).hostname;
   let md = raw.split(/^Markdown Content:\s*$/m)[1] || raw;
