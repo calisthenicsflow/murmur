@@ -118,6 +118,7 @@ body.align-left .rd-text{text-align:left}
 .rd-text.listening .s{opacity:.55}
 .rd-text.listening .s.cs{opacity:1}
 .rd-text .w.cw{color:var(--accent-ink)}
+.rd-text .w.cw.split{background:var(--accent);-webkit-box-decoration-break:clone;box-decoration-break:clone;padding:1px 3px;margin:-1px -3px}
 .rd-text .s.sel{background:var(--accent-soft);border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .rd-text .w.u{word-break:break-all}
 .hl{position:absolute;left:0;top:0;width:0;height:0;border-radius:7px;background:var(--accent);z-index:0;opacity:0;pointer-events:none;
@@ -332,3 +333,27 @@ textarea{min-height:170px;resize:none;font-family:var(--serif);line-height:1.5}
 .toast.show{transform:translate(-50%,0);opacity:1}
 @media (min-width:700px){ #app{max-width:520px;left:50%;transform:translateX(-50%);box-shadow:0 0 80px rgba(0,0,0,.08)} .sheet{max-width:520px;margin:0 auto} }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* v1.1 — text language row, grouped voice headers, preview button states */
+.tlang{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 0 10px;padding:10px 14px;border-radius:16px;background:var(--line);font-size:13px;color:var(--ink2);font-weight:600}
+.tlang>span{white-space:nowrap}
+.tl-sel{position:relative;display:flex;justify-content:flex-end;min-width:0;text-align:right;cursor:pointer}.tl-sel>span{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
+.tl-sel b{font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tl-sel b::after{content:'';display:inline-block;width:6px;height:6px;margin:0 2px 2px 7px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(45deg)}
+.tl-sel small{font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;margin-top:1px}.tl-sel small:empty{display:none}
+.tl-sel select{position:absolute;inset:-8px;opacity:0;width:calc(100% + 16px);font-size:16px;cursor:pointer}
+.vgroup summary span:first-child{letter-spacing:.6px;text-transform:none;font-size:13px;color:var(--ink2)}
+.vgroup.cur summary span:first-child{color:var(--ink)}
+.vgroup summary em{font-style:normal;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-left:6px}
+.vgroup summary::after{content:'';width:7px;height:7px;margin-left:10px;border-right:1.6px solid var(--muted);border-bottom:1.6px solid var(--muted);transform:rotate(-45deg);transition:transform .2s;flex:none}
+.vgroup[open] summary::after{transform:rotate(45deg) translate(-2px,-2px)}
+.vgroup summary span:last-child{margin-left:auto}
+.vrow .pv{position:relative;flex:none;color:var(--ink);transition:background .2s,color .2s}
+.vrow .pv .i-stop{display:none}
+.vrow .pv.playing{background:var(--accent);color:#fff}
+.vrow .pv.playing svg:first-child{display:none}.vrow .pv.playing .i-stop{display:block}
+.vrow .pv.loading svg{opacity:0}
+.vrow .pv.loading::after{content:'';position:absolute;inset:8px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:pvspin .7s linear infinite}
+@keyframes pvspin{to{transform:rotate(360deg)}}
+.fs-steps{display:flex;align-items:flex-end;justify-content:space-between;gap:4px;padding:4px;margin-bottom:12px;border-radius:16px;background:var(--line)}
+.fs-steps button{flex:1;height:44px;border-radius:12px;font-family:var(--display);font-weight:600;color:var(--ink2);display:grid;place-items:center;transition:background .25s,color .25s}
+.fs-steps button.on{background:var(--sheet);color:var(--ink);box-shadow:0 2px 8px -2px rgba(0,0,0,.18)}

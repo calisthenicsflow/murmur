@@ -18,14 +18,17 @@ A mobile-first reading app: library shelves, a calm paper reader, and listening 
 | Engine | Where it works | Notes |
 |---|---|---|
 | Microsoft Edge neural voices (pre-voiced) | everywhere, no server | the sample books ship with neural audio + word timings in `audio/` (generated with `edge-tts`) |
-| Microsoft Edge neural voices (relay) | any text, 300+ voices | needs `relay/relay.py` running somewhere reachable over HTTPS; set its URL in Voice → Neural relay or in `config.json` |
+| Microsoft Edge neural voices (relay) | any text; a curated 1–5 best voices per language (162 voices, 75 languages, `js/voices.js`) | served by the free Cloudflare Worker in `worker/` (URL in `config.json`); `relay/relay.py` is a self-hosted alternative |
 | Device voices (Web Speech API) | everywhere | Siri / enhanced voices on iPhone, free; used automatically when neural is unavailable |
 
 Why a relay: Microsoft's Read Aloud endpoint only accepts Microsoft Edge's browser identity (User-Agent) plus a rotating `Sec-MS-GEC` token, which a web page in Safari/Chrome cannot send. The relay runs the open-source `edge-tts` library and returns MP3 + exact word boundaries.
 
 The engine layer (`js/engines.js`) is pluggable: `createAudioEngine({ synth })` accepts any service that returns audio + word timings (ElevenLabs, Azure Speech, Grok TTS…).
 
-### Run the relay
+### Voice previews
+Every curated voice has a static sample in `audio/previews/<voice>.mp3` (instant playback, no network round-trip). Regenerate with `tools/curate.py` → `tools/gen_previews.py` (needs `pip install edge-tts`).
+
+### Run the relay yourself (alternative to the Worker)
 ```
 pip install edge-tts aiohttp
 python3 relay/relay.py --port 8787     # then expose it over HTTPS (tunnel / small VPS)

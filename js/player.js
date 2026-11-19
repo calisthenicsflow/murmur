@@ -4,6 +4,7 @@ export class Player {
     this.engine = null; this.model = null; this.lang = 'en'; this.voice = null; this.rate = 1; this.volume = 1;
     this.playing = false; this.paused = false; this.cur = 0; this.curSent = 0; this.ctrl = null; this.chunks = []; this.ci = 0;
     this.bilingual = null; // { to, voice, translate:(sIdx)=>Promise<string> }
+    this.voiceFor = null;  // (lang) => voice id for sentences in another language (mixed texts)
     this.on = { word: () => {}, sentence: () => {}, state: () => {}, end: () => {}, error: () => {}, trans: () => {} };
   }
   setModel(model, lang) { this.stop(); this.model = model; this.lang = lang; this.cur = 0; this.curSent = 0; }
@@ -20,11 +21,12 @@ export class Player {
       const ws = sents[s].words.filter(w => (whole || w >= fromWord) && words[w].say);
       if (!ws.length || (whole && !sents[s].words.some(w => w >= fromWord && words[w].say))) continue;
       const sentLen = ws.reduce((a, w) => a + words[w].say.length + 1, 0);
+      const lang = sents[s].lang || this.lang;
       // first chunk is a single sentence for a fast start; bilingual "read both" is per sentence
-      if (cur && (both || whole || out.length === 0 || cur.text.length + sentLen > this.maxChars())) flush();
+      if (cur && (both || whole || out.length === 0 || cur.lang !== lang || cur.text.length + sentLen > this.maxChars())) flush();
       for (const w of ws) {
-        if (!cur) { cur = { text: '', map: [], sents: [], lang: this.lang }; if (whole && ws[0] < fromWord) cur.seek = sents[s].words.find(x => x >= fromWord && words[x].say); }
-        if (!whole && cur.text.length > this.maxChars() * 1.25 && /[,;:—–]$/.test(cur.text)) { flush(); cur = { text: '', map: [], sents: [], lang: this.lang }; }
+        if (!cur) { cur = { text: '', map: [], sents: [], lang, voice: lang !== this.lang && this.voiceFor ? this.voiceFor(lang) : null }; if (whole && ws[0] < fromWord) cur.seek = sents[s].words.find(x => x >= fromWord && words[x].say); }
+        if (!whole && cur.text.length > this.maxChars() * 1.25 && /[,;:—–]$/.test(cur.text)) { flush(); cur = { text: '', map: [], sents: [], lang, voice: lang !== this.lang && this.voiceFor ? this.voiceFor(lang) : null }; }
         if (!cur.sents.includes(s)) cur.sents.push(s);
         if (cur.text) cur.text += ' ';
         const start = cur.text.length; cur.text += words[w].say;
@@ -48,10 +50,14 @@ export class Player {
     const c = this.chunks[this.ci];
     if (!c) { this.playing = false; this.on.state(); this.on.end(); return; }
     // prefetch ahead
-    for (let k = 1; k <= 2; k++) { const n = this.chunks[this.ci + k]; if (n && !n.trans) this.engine.prefetch(n, this.voice); }
+    for (let k = 1; k <= 3; k++) {
+      const n = this.chunks[this.ci + k]; if (!n) break;
+      if (n.trans === undefined) this.engine.prefetch(n, n.voice || this.voice);
+      else if (this.bilingual) { const b = this.bilingual; b.translate(n.trans).then(text => { if (text) (b.engine || this.engine).prefetch({ text, map: [], lang: b.to }, b.voice); }).catch(() => {}); }
+    }
     if (c.trans !== undefined) return this.playTrans(c.trans);
     this.ctrl = this.engine.play(c, {
-      voice: this.voice, rate: this.rate, volume: this.volume,
+      voice: c.voice || this.voice, rate: this.rate, volume: this.volume,
       onWord: w => { this.cur = w; const s = this.model.words[w].s; if (s !== this.curSent) { this.curSent = s; this.on.sentence(s); } this.on.word(w); },
       onEnd: () => { this.ci++; this.next(); },
       onError: e => { this.playing = false; this.on.state(); this.on.error(e); }
@@ -87,7 +93,7 @@ export class Player {
     if (!this.model) return;
     const { sents, words } = this.model; const s = words[this.cur]?.s ?? 0;
     let target = s + dir;
-    if (dir < 0 && this.cur !== sents[s].words[0]) target = s;
+    if (dir < 0 && sents[s].words.indexOf(this.cur) > 2) target = s;   // mid-sentence: restart it; at its start: previous sentence
     target = Math.max(0, Math.min(sents.length - 1, target));
     const w = sents[target].words[0]; this.cur = w; this.curSent = target;
     this.on.sentence(target); this.on.word(w);

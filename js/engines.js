@@ -5,11 +5,17 @@
 // chunk = { text, map:[{start,end,w}], lang }. opts = { voice, rate, volume, onWord(w), onEnd(), onError(e) }
 // A premium engine (ElevenLabs / Grok TTS / Azure) only needs to return audio + word timings
 // to reuse AudioEngine below — see createAudioEngine({ synth }).
-import { norm } from './text.js';
+import { norm } from './text.js?v=1.1.0';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.1.0';
+import { db } from './db.js?v=1.1.0';
 
 const NOVELTY = /^(Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Deranged|Good News|Hysterical|Jester|Junior|Organ|Pipe Organ|Ralph|Superstar|Trinoids|Whisper|Wobble|Zarvox|Fred|Kathy|Grandma|Grandpa|Eddy|Flo|Reed|Rocko|Sandy|Shelley)\b/i;
 const LANG_NAMES = (() => { try { return new Intl.DisplayNames(['en'], { type: 'language' }); } catch { return null; } })();
-export const langName = l => { try { return LANG_NAMES ? LANG_NAMES.of(l) : l; } catch { return l; } };
+const LN_FALLBACK = { iu: 'Inuktitut', fil: 'Filipino', jv: 'Javanese', su: 'Sundanese' };
+export const langName = (l, inLang = 'en') => { try { const n = new Intl.DisplayNames([inLang], { type: 'language' }).of(l); return n && n !== l ? n.charAt(0).toLocaleUpperCase(inLang) + n.slice(1) : (LN_FALLBACK[l] || l); } catch { return LN_FALLBACK[l] || l; } };
+/** the language's own name, e.g. ru → Русский */
+export const nativeName = l => { try { const n = new Intl.DisplayNames([l], { type: 'language' }).of(l); return n && n !== l ? n.charAt(0).toLocaleUpperCase(l) + n.slice(1) : langName(l); } catch { return langName(l); } };
+export const regionName = (loc, inLang = 'en') => { const c = loc.split('-').find((x, i) => i > 0 && /^[A-Z]{2}$/.test(x)); try { return c ? new Intl.DisplayNames([inLang], { type: 'region', style: 'short' }).of(c) : ''; } catch { return ''; } };
 
 function wordAt(map, charIndex) {
   let lo = 0, hi = map.length - 1, ans = 0;
@@ -44,6 +50,10 @@ export function createWebSpeechEngine() {
       const raw = await loadVoices();
       vcache = raw.map(v => ({ id: v.voiceURI || v.name, name: v.name.replace(/\s*\(.*\)$/, ''), detail: v.name.match(/\((.*)\)/)?.[1] || '', locale: v.lang.replace('_', '-'), lang: v.lang.slice(0, 2).toLowerCase(), quality: quality(v), raw: v, engine: 'device' }))
         .filter(v => v.quality >= 0).sort((a, b) => b.quality - a.quality || a.name.localeCompare(b.name));
+      // keep only the best few per language (iOS ships dozens of low-quality/compact voices)
+      const pref = (navigator.language || '').toLowerCase(), per = {};
+      vcache = vcache.sort((a, b) => b.quality - a.quality || (b.locale.toLowerCase() === pref) - (a.locale.toLowerCase() === pref) || a.name.localeCompare(b.name))
+        .filter(v => { const seen = per[v.lang] = per[v.lang] || new Set(); if (seen.size >= 3 || seen.has(v.name)) return false; seen.add(v.name); return true; });
       return vcache;
     },
     defaultVoice(lang, voices) {
@@ -87,7 +97,7 @@ export function createWebSpeechEngine() {
 
 /* --------------------- Audio engine (neural voices) --------------------- */
 // synth(text, voice) → Promise<{ audio: Blob, words: [[startMs, durMs, text], ...] }>
-const SILENT = 'data:audio/mpeg;base64,//NExAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
+export const SILENT = 'data:audio/mpeg;base64,SUQzBAAAAAAAIlRTU0UAAAAOAAADTGF2ZjYxLjcuMTAzAAAAAAAAAAAAAAD/84TAAAAAAAAAAAAASW5mbwAAAA8AAAANAAAFoAAzMzMzMzMzRERERERERERVVVVVVVVVVWZmZmZmZmZ3d3d3d3d3d4iIiIiIiIiImZmZmZmZmaqqqqqqqqqqu7u7u7u7u7vMzMzMzMzM3d3d3d3d3d3u7u7u7u7u7v////////8AAAAATGF2YzYxLjE5AAAAAAAAAAAAAAAAJAOQAAAAAAAABaBTBYX9AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/80TEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TEUwAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TEpgAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TErAAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TErAAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TErAAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TErAAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TErAAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TErAAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TErAAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy7/80TErAAAA0gAAAAAMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/80TErAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/80TErAAAA0gAAAAAVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=';
 export function createAudioEngine({ id, synth, listVoices, health, defaults }) {
   const audio = new Audio(); audio.preload = 'auto'; audio.setAttribute('playsinline', '');
   try { audio.preservesPitch = true; audio.webkitPreservesPitch = true; } catch {}
@@ -117,7 +127,7 @@ export function createAudioEngine({ id, synth, listVoices, health, defaults }) {
     return out;
   }
   return {
-    id, canPause: true, audio,
+    id, canPause: true, audio, synthRaw: synth,
     async ready() { try { return await health(); } catch { return false; } },
     async voices() { if (!vcache) vcache = await listVoices(); return vcache; },
     defaultVoice(lang, voices) { const d = defaults[lang]; if (d && voices.some(v => v.id === d)) return d; return (voices.find(v => v.lang === lang) || voices.find(v => v.multi) || voices[0])?.id; },
@@ -169,15 +179,25 @@ export function createAudioEngine({ id, synth, listVoices, health, defaults }) {
    Two sources, same voices and word timings:
    1. audio/index.json — sample books pre-voiced at build time (works on GitHub Pages with no server);
    2. a relay (relay/relay.py) for any text, when one is configured and online. */
+const fnv = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36); };
+const ttsKey = (text, voice) => `tts:${voice}:${fnv(text)}:${text.length}`;
+const TTS_MAX = 400;
+function rememberTts(k, v) {
+  let keys = []; try { keys = JSON.parse(localStorage.getItem('murmur:ttsKeys') || '[]'); } catch {}
+  keys = keys.filter(x => x !== k); keys.push(k);
+  while (keys.length > TTS_MAX) db.del('kv', keys.shift());
+  try { localStorage.setItem('murmur:ttsKeys', JSON.stringify(keys)); } catch {}
+  db.set('kv', k, v);
+}
 export function createEdgeEngine(getBase) {
   const b64 = s => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
   const timeout = (ms) => { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; };
-  const POPULAR = ['en-US-AvaMultilingualNeural', 'en-US-AndrewMultilingualNeural', 'en-US-EmmaMultilingualNeural', 'en-US-BrianMultilingualNeural', 'en-GB-SoniaNeural', 'en-GB-RyanNeural', 'en-US-AriaNeural', 'en-US-GuyNeural', 'ru-RU-SvetlanaNeural', 'ru-RU-DmitryNeural', 'de-DE-SeraphinaMultilingualNeural', 'fr-FR-VivienneMultilingualNeural'];
+  const POPULAR_UNUSED = ['en-US-AvaMultilingualNeural', 'en-US-AndrewMultilingualNeural', 'en-US-EmmaMultilingualNeural', 'en-US-BrianMultilingualNeural', 'en-GB-SoniaNeural', 'en-GB-RyanNeural', 'en-US-AriaNeural', 'en-US-GuyNeural', 'ru-RU-SvetlanaNeural', 'ru-RU-DmitryNeural', 'de-DE-SeraphinaMultilingualNeural', 'fr-FR-VivienneMultilingualNeural'];
   let relayOk = false, staticIdx = null;
   const loadStatic = async () => { if (staticIdx) return staticIdx; try { staticIdx = await fetch('audio/index.json').then(r => r.json()); } catch { staticIdx = { voices: {}, books: {}, items: {} }; } return staticIdx; };
   const eng = createAudioEngine({
     id: 'neural',
-    defaults: { en: 'en-US-AvaMultilingualNeural', ru: 'ru-RU-SvetlanaNeural', de: 'de-DE-SeraphinaMultilingualNeural', fr: 'fr-FR-VivienneMultilingualNeural', es: 'es-ES-XimenaNeural', uk: 'uk-UA-PolinaNeural', it: 'it-IT-ElsaNeural' },
+    defaults: Object.fromEntries(Object.entries(CURATED).map(([l, ids]) => [l, ids[0]])),
     async health() {
       await loadStatic();
       const base = getBase(); relayOk = false;
@@ -191,19 +211,50 @@ export function createEdgeEngine(getBase) {
         const idx = await loadStatic();
         list = Object.values(idx.voices || {}).map(id => { const [l, c, n] = id.split('-'); return { id, name: n.replace(/(Multilingual)?Neural$/, ''), locale: `${l}-${c}`, lang: l, gender: /Svetlana|Ava|Emma|Aria|Sonia/.test(id) ? 'Female' : 'Male', multi: /Multilingual/.test(id), tags: [] }; });
       }
-      return list.map(v => ({ ...v, quality: POPULAR.includes(v.id) ? 4 : 3, detail: [v.gender, v.multi ? 'Multilingual' : '', (v.tags || []).slice(0, 1).join('')].filter(Boolean).join(' · '), engine: 'neural' }))
-        .sort((a, b) => (POPULAR.indexOf(a.id) + 1 || 99) - (POPULAR.indexOf(b.id) + 1 || 99) || a.locale.localeCompare(b.locale) || a.name.localeCompare(b.name));
+      // curated: only the best voices per language, in quality order (unknown future languages: first 2)
+      const rank = v => { const c = CURATED[v.lang]; return c ? c.indexOf(v.id) : -2; };
+      const extra = {};
+      list = list.filter(v => { const r = rank(v); if (r >= 0) return true; if (r === -2) { extra[v.lang] = (extra[v.lang] || 0) + 1; return extra[v.lang] <= 2; } return false; });
+      return list.map(v => ({ ...v, name: v.name.replace(/Multilingual$/, ''), quality: 4, detail: [regionName(v.locale), v.gender === 'Female' ? '♀' : v.gender === 'Male' ? '♂' : '', v.multi ? 'Multilingual' : ''].filter(Boolean).join(' · '), engine: 'neural' }))
+        .sort((a, b) => a.lang.localeCompare(b.lang) || rank(a) - rank(b));
     },
     async synth(text, voice) {
       const idx = await loadStatic(), hit = idx.items && idx.items[voice + '|' + text];
       if (hit) { const r = await fetch(hit[0]); if (r.ok) return { audio: await r.blob(), words: hit[1] }; }
+      // persistent cache: re-listening (or coming back to a book) is instant and works offline
+      const ck = ttsKey(text, voice);
+      const saved = await db.get('kv', ck).catch(() => undefined);
+      if (saved && saved.a) return { audio: new Blob([saved.a], { type: 'audio/mpeg' }), words: saved.w };
       if (!relayOk) throw new Error('neural: no relay for this text');
-      const r = await fetch(getBase() + '/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice }), signal: timeout(20000) });
-      if (!r.ok) throw new Error('relay ' + r.status);
-      const j = await r.json();
-      return { audio: new Blob([b64(j.audio)], { type: 'audio/mpeg' }), words: j.words };
+      let j, lastErr;
+      for (let attempt = 0; attempt < 2 && !j; attempt++) {
+        try {
+          const r = await fetch(getBase() + '/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice }), signal: timeout(45000) });
+          if (!r.ok) throw new Error('relay ' + r.status);
+          j = await r.json();
+        } catch (e) { lastErr = e; if (attempt === 0) await new Promise(res => setTimeout(res, 600)); }
+      }
+      if (!j) throw lastErr;
+      const bytes = b64(j.audio);
+      rememberTts(ck, { a: bytes.buffer, w: j.words });
+      return { audio: new Blob([bytes], { type: 'audio/mpeg' }), words: j.words };
     }
   });
+  // short voice sample: pre-rendered file (audio/previews/<id>.mp3), else synthesised via the relay; cached as blob URLs
+  const pv = new Map();
+  eng.preview = (voice, lang) => {
+    if (!pv.has(voice)) {
+      const p = (async () => {
+        const r = await fetch(`audio/previews/${voice}.mp3`).catch(() => null);
+        if (r && r.ok) return URL.createObjectURL(await r.blob());
+        const res = await eng.synthRaw(PREVIEW_TEXT[lang] || PREVIEW_TEXT.en, voice);
+        return URL.createObjectURL(res.audio);
+      })();
+      p.catch(() => pv.delete(voice)); pv.set(voice, p);
+    }
+    return pv.get(voice);
+  };
+  eng.previewCached = voice => pv.has(voice);
   eng.relayOnline = () => relayOk;
   /** true when this engine can voice the given book right now */
   eng.covers = async (bookId) => relayOk || !!(await loadStatic()).books?.[bookId];

@@ -1,16 +1,17 @@
-import { db } from './db.js';
+import { db } from './db.js?v=1.1.0';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang } from './text.js';
-import { coverSVG, autoCover } from './covers.js';
-import { createWebSpeechEngine, createEdgeEngine, langName } from './engines.js';
-import { Player } from './player.js';
-import { translateMany } from './translate.js';
-import { track, summary } from './stats.js';
-import { renderCard, shareCard } from './quotes.js';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js';
-import { SAMPLES } from './samples.js';
+import { buildModel, detectLang, wc } from './text.js?v=1.1.0';
+import { coverSVG, autoCover } from './covers.js?v=1.1.0';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.1.0';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.1.0';
+import { Player } from './player.js?v=1.1.0';
+import { translateMany } from './translate.js?v=1.1.0';
+import { track, summary } from './stats.js?v=1.1.0';
+import { renderCard, shareCard } from './quotes.js?v=1.1.0';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.1.0';
+import { SAMPLES } from './samples.js?v=1.1.0';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -29,7 +30,8 @@ const ICON = {
   focus: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M3 9V5a2 2 0 0 1 2-2h4M15 3h4a2 2 0 0 1 2 2v4M21 15v4a2 2 0 0 1-2 2h-4M9 21H5a2 2 0 0 1-2-2v-4"/></svg>',
   wand: '<svg viewBox="0 0 24 24"><path d="M5 19L15 9M14 4v3M19.5 9.5h-3M17.7 5.3l-2 2M9 4.5l.8 1.7 1.7.8-1.7.8L9 9.5l-.8-1.7L6.5 7l1.7-.8z"/></svg>',
   file: '<svg viewBox="0 0 24 24"><path d="M14 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3.5V8h4.5M9 13h6M9 16.5h4"/></svg>',
-  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'
+  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" class="i-stop"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>'
 };
 const SHELVES = [
   { id: 'novels', g: 'rgba(255,138,61,.55)', g2: 'rgba(240,104,36,.72)' },
@@ -40,6 +42,7 @@ const SHELVES = [
   { id: 'design', g: 'rgba(250,196,60,.55)', g2: 'rgba(232,166,24,.72)' },
   { id: 'mine', g: 'rgba(120,120,128,.42)', g2: 'rgba(80,80,88,.6)' }
 ];
+const FS_STEPS = [14, 16, 18, 21, 24, 28, 32, 36], FS_MIN = 14, FS_MAX = 36;
 const TR_LANGS = ['ru', 'en', 'es', 'de', 'fr', 'it', 'uk', 'pt', 'tr', 'zh', 'ja'];
 
 /* ------------------------------ state ------------------------------ */
@@ -64,15 +67,19 @@ function applyI18n() { $$('[data-i]').forEach(el => { el.textContent = t(el.data
 function applyLook() {
   document.body.dataset.theme = prefs.theme;
   const r = document.documentElement.style;
-  r.setProperty('--fs', prefs.fs + 'px'); r.setProperty('--lh', prefs.lh);
+  prefs.fs = Math.max(FS_MIN, Math.min(FS_MAX, +prefs.fs || 19));
+  // line height tightens a little for very large type and opens up for small type
+  const lhEff = Math.max(1.3, +(prefs.lh - Math.max(-0.06, Math.min(0.2, (prefs.fs - 19) * 0.011))).toFixed(3));
+  r.setProperty('--fs', prefs.fs + 'px'); r.setProperty('--lh', lhEff);
   r.setProperty('--serif', { literata: "'Literata', Georgia, serif", source: "'Source Serif 4', Georgia, serif", inter: "'Inter', system-ui, sans-serif" }[prefs.font]);
   $('#dim').style.opacity = prefs.dim;
-  document.body.classList.toggle('align-left', prefs.align === 'left');
+  document.body.classList.toggle('align-left', prefs.align === 'left' || prefs.fs >= 28); // justify makes huge gaps in a narrow column at big sizes
   const tc = { paper: '#EFEDEA', sepia: '#F2E8D6', night: '#131315' }[prefs.theme];
   $('meta[name=theme-color]').setAttribute('content', tc);
   requestAnimationFrame(() => positionHL(true));
 }
 
+const keepWordInView = debounce(() => { if (S.screen === 'reader' && S.curW >= 0) { positionHL(true); scrollToWord(S.curW, false); } }, 120);
 /* ------------------------------ navigation ------------------------------ */
 function show(id, push = true) {
   const from = S.screen; if (from === id) return;
@@ -104,7 +111,7 @@ async function loadBooks() {
 }
 function bookProgress(b) {
   if (!b.pos || !b.sections) return 0;
-  const n = b.sections.length; const words = b.sections[b.pos.sec]?.text.split(/\s+/).length || 1;
+  const n = b.sections.length; const words = wc(b.sections[b.pos.sec]?.text) || 1;
   return Math.min(1, (b.pos.sec + Math.min(1, (b.pos.w || 0) / words)) / n);
 }
 function renderLibrary() {
@@ -178,14 +185,14 @@ function openAdd(tab = 'paste') {
       err.textContent = ''; go.disabled = true; const lbl = go.querySelector('span'); lbl.textContent = tab === 'url' ? t('fetching') : t('importing');
       try {
         let r;
-        if (tab === 'paste') { const txt = body.querySelector('#addText').value.trim(); if (txt.split(/\s+/).length < 3) throw new Error('empty'); r = fromText(txt, body.querySelector('#addTitle').value.trim()); }
+        if (tab === 'paste') { const txt = body.querySelector('#addText').value.trim(); if (wc(txt) < 3) throw new Error('empty'); r = fromText(txt, body.querySelector('#addTitle').value.trim()); }
         else if (tab === 'file') {
           if (!fileObj) throw new Error('nofile');
           const n = fileObj.name.toLowerCase();
           r = n.endsWith('.pdf') ? await fromPDF(fileObj) : n.endsWith('.epub') ? await fromEPUB(fileObj) : fromText(await fileObj.text(), fileObj.name.replace(/\.\w+$/, ''));
         } else { const u = body.querySelector('#addUrl').value.trim(); if (!u) throw new Error('nourl'); r = await fromURL(u); }
-        if (!r.sections || !r.sections.length || !r.sections.some(s => s.text.trim().split(/\s+/).length > 2)) throw new Error('empty');
-        const book = { id: 'u-' + uid(), title: r.title || 'Untitled', author: r.author || '', lang: r.lang || detectLang(r.sections[0].text), shelf, sections: r.sections, source: r.source || '', createdAt: Date.now() };
+        if (!r.sections || !r.sections.length || !r.sections.some(s => wc(s.text) > 2)) throw new Error('empty');
+        const book = { id: 'u-' + uid(), title: r.title || 'Untitled', author: r.author || '', lang: r.lang || detectLang(r.sections.slice(0, 3).map(x => x.text).join('\n\n')), lv: 2, shelf, sections: r.sections, source: r.source || '', createdAt: Date.now() };
         book.cover = autoCover(book.title + book.id);
         await db.set('books', book.id, book); S.books.unshift(book);
         closeSheet(); renderLibrary(); toast(t('added'));
@@ -221,7 +228,9 @@ $('#scrim').onclick = () => closeSheet();
 /* ------------------------------ reader ------------------------------ */
 async function openBook(id, autoplay = false) {
   const b = S.books.find(x => x.id === id); if (!b) return;
-  S.book = b; b.openedAt = Date.now(); db.set('books', b.id, b);
+  S.book = b; b.openedAt = Date.now();
+  if (!b.sample && !b.langManual && b.lv !== 2) { b.lang = detectLang(b.sections.slice(0, 3).map(x => x.text).join('\n\n')) || b.lang; b.lv = 2; }
+  db.set('books', b.id, b);
   S.sec = Math.min(b.pos?.sec || 0, b.sections.length - 1);
   setMode(autoplay ? 'listen' : 'read', true);
   show('reader');
@@ -246,7 +255,7 @@ function renderSection(startWord = 0, scroll = true) {
     html += `<p class="${first && !p.skip ? 'first' : ''}${p.skip ? ' skip' : ''}">`;
     first = false;
     for (const s of p.sents) {
-      html += `<span class="s" data-s="${s}">` + sents[s].words.map(w => `<span class="w${words[w].say ? '' : ' sk'}${/^\(?(https?:|www\.)/i.test(words[w].t) ? ' u' : ''}" data-w="${w}">${esc(words[w].t)}</span>`).join(' ') + '</span>';
+      html += `<span class="s" data-s="${s}">` + sents[s].words.map(w => `<span class="w${words[w].say ? '' : ' sk'}${/^\(?(https?:|www\.)/i.test(words[w].t) ? ' u' : ''}" data-w="${w}">${esc(words[w].t)}</span>`).map((h, k) => h + (words[sents[s].words[k]].ns ? '' : ' ')).join('').trimEnd() + '</span>';
       html += `<span class="tr${tr[s] ? '' : ' load'}" data-t="${s}">${esc(tr[s] || '·')}</span> `;
     }
     html += '</p>';
@@ -300,6 +309,11 @@ function positionHL(instant) {
   const el = S.wordEls[S.curW];
   const active = S.mode === 'listen' && (player.playing || player.paused) && el;
   if (!active) { hl.classList.remove('on'); return; }
+  // a word broken across two lines (hyphenation) would make one huge box over both lines:
+  // paint that word inline instead and park the floating box
+  $$('#rdText .w.split').forEach(x => x !== el && x.classList.remove('split'));
+  if (el.getClientRects().length > 1) { el.classList.add('split'); hl.classList.remove('on'); return; }
+  el.classList.remove('split');
   const art = $('#rdText').getBoundingClientRect(), r = el.getBoundingClientRect();
   if (instant) hl.style.transition = 'none';
   hl.style.transform = `translate(${r.left - art.left - 3}px, ${r.top - art.top - 1}px)`;
@@ -403,7 +417,7 @@ function setMode(m, silent) {
   positionHL();
   if (!silent) hidePop();
 }
-$('#dSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.mode === 'listen') unlockAudio(); setMode(b.dataset.mode); };
+$('#dSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.mode === 'listen') { unlockAudio(); warmFirst(); } setMode(b.dataset.mode); };
 
 function engine() {
   if (prefs.engine === 'device' || S.neuralFailed) return device;
@@ -419,6 +433,7 @@ async function syncVoice() {
   let v = prefs.voices[voiceKey(S.book.lang)];
   if (!v || !vs.some(x => x.id === v)) v = eng.defaultVoice(S.book.lang, vs);
   player.voice = v;
+  player.voiceFor = l => { const o = prefs.voices[voiceKey(l, eng)]; return o && vs.some(x => x.id === o) ? o : eng.defaultVoice(l, vs); };
   const vo = vs.find(x => x.id === v);
   $('#pVoice .v').textContent = vo ? vo.name : '—';
   $('#pVoice .dot').classList.toggle('neural', eng.id === 'neural');
@@ -432,6 +447,10 @@ async function setupBilingualVoice() {
   let te = eng, tv = v;
   if (eng.id === 'neural' && !S.neuralOk) { te = device; const dv = await device.voices().catch(() => []); tv = prefs.voices[voiceKey(to, device)] || device.defaultVoice(to, dv); }
   player.bilingual = prefs.bi ? { to, voice: tv, engine: te, readBoth: prefs.both, translate: s => getTrans(s) } : null;
+}
+/** fetch the audio of the sentence that would play next, so Play starts instantly */
+async function warmFirst() {
+  try { await S.voiceReady; if (!S.model || player.playing) return; player.engine = engine(); const c = player.build(Math.max(0, S.curW))[0]; if (c && c.trans === undefined) player.engine.prefetch(c, c.voice || player.voice); } catch {}
 }
 function unlockAudio() { try { engine().unlock?.(); } catch {} }
 async function startPlayback(w) {
@@ -461,6 +480,7 @@ player.on.error = e => {
   if (player.engine && player.engine.id === 'neural') {
     S.neuralOk = false; S.neuralFailed = true; toast(t('neuralOff'), 3200);
     syncVoice().then(() => startPlayback(S.curW >= 0 ? S.curW : 0));
+    clearTimeout(S.reNeural); S.reNeural = setTimeout(async () => { S.neuralFailed = false; if (!(await checkRelay()) && !(S.book && S.staticBooks?.has(S.book.id))) S.neuralFailed = true; else if (!player.playing) syncVoice(); }, 45000);
   }
 };
 player.on.trans = (s, on) => {
@@ -488,7 +508,7 @@ function renderFocus(force) {
   f.dataset.s = s;
   const tr = S.trans[transKey()] || [];
   const ctx = i => sents[i] ? `<div class="f-s ctx">${esc(sents[i].text)}</div>` : '<div class="f-s ctx"></div>';
-  $('#fStage').innerHTML = `${ctx(s - 1)}<div class="f-s cur f-enter${player.playing ? ' speaking' : ''}${sents[s].text.length > 330 ? ' xlong' : sents[s].text.length > 210 ? ' long' : ''}">${sents[s].words.map(w => `<span class="w" data-fw="${w}">${esc(words[w].t)}</span>`).join(' ')}</div>${prefs.bi ? `<div class="f-tr f-enter">${esc(tr[s] || '…')}</div>` : ''}${ctx(s + 1)}`;
+  $('#fStage').innerHTML = `${ctx(s - 1)}<div class="f-s cur f-enter${player.playing ? ' speaking' : ''}${sents[s].text.length > 330 ? ' xlong' : sents[s].text.length > 210 ? ' long' : ''}">${sents[s].words.map(w => `<span class="w" data-fw="${w}">${esc(words[w].t)}</span>${words[w].ns ? '' : ' '}`).join('').trimEnd()}</div>${prefs.bi ? `<div class="f-tr f-enter">${esc(tr[s] || '…')}</div>` : ''}${ctx(s + 1)}`;
   $('#fProg').textContent = `${s + 1} / ${sents.length}`;
   if (S.curW >= 0) focusWord(S.curW);
 }
@@ -540,8 +560,9 @@ function setBilingual(on) {
   prefs.bi = on; savePrefs();
   $('#rdText').classList.toggle('bi', on); $('#pBi').classList.toggle('on', on);
   if (on) ensureTranslations(); else { trRun++; player.bilingual = null; }
-  setupBilingualVoice();
-  if (player.playing) player.play(S.curW);
+  // the main text keeps its language and voice; the translation is only voiced when "read both" is on
+  const wasPlaying = player.playing;
+  setupBilingualVoice().then(() => { if (wasPlaying && player.playing) player.play(S.curW); });
   if (prefs.focus) renderFocus(true);
   requestAnimationFrame(() => { positionHL(true); if (S.curW > 0) scrollToWord(S.curW, false); });
 }
@@ -560,7 +581,7 @@ $('#rdMark').onclick = () => {
 /* ------------------------------ more sheet ------------------------------ */
 $('#rdMore').onclick = () => {
   const b = S.book;
-  const toc = b.sections.map((s, i) => `<div class="row${i === S.sec ? ' cur' : ''}" data-sec="${i}"><div class="ic" style="font-family:var(--display);font-weight:700">${i + 1}</div><div class="tx"><b>${esc(s.title || s.label || b.title)}</b><small>${esc(s.label || '')}${s.label ? ' · ' : ''}${s.text.split(/\s+/).length} ${t('words')}</small></div></div>`).join('');
+  const toc = b.sections.map((s, i) => `<div class="row${i === S.sec ? ' cur' : ''}" data-sec="${i}"><div class="ic" style="font-family:var(--display);font-weight:700">${i + 1}</div><div class="tx"><b>${esc(s.title || s.label || b.title)}</b><small>${esc(s.label || '')}${s.label ? ' · ' : ''}${wc(s.text)} ${t('words')}</small></div></div>`).join('');
   const marks = (b.marks || []).map((m, i) => `<div class="row" data-mark="${i}"><div class="ic">${ICON.mark}</div><div class="tx"><b>${esc(b.sections[m.sec]?.title || b.title)}</b><small>${esc(m.text)}</small></div></div>`).join('') || `<div class="note">${t('noBookmarks')}</div>`;
   const langs = TR_LANGS.filter(l => l !== b.lang).map(l => `<option value="${l}" ${l === biTarget() ? 'selected' : ''}>${esc(langName(l))}</option>`).join('');
   openSheet(`<div class="sh-title">${esc(b.title)}<button class="x" data-close>${ICON.x}</button></div>
@@ -575,10 +596,10 @@ $('#rdMore').onclick = () => {
       const k = r.dataset.tg, sw = r.querySelector('.sw');
       if (k === 'focus') { toggleFocus(); sw.classList.toggle('on', prefs.focus); }
       if (k === 'bi') { setBilingual(!prefs.bi); sw.classList.toggle('on', prefs.bi); }
-      if (k === 'both') { prefs.both = !prefs.both; savePrefs(); sw.classList.toggle('on', prefs.both); if (prefs.both && !prefs.bi) { setBilingual(true); body.querySelector('[data-tg=bi] .sw').classList.add('on'); } else { setupBilingualVoice(); if (player.playing) player.play(S.curW); } }
+      if (k === 'both') { prefs.both = !prefs.both; savePrefs(); sw.classList.toggle('on', prefs.both); if (prefs.both && !prefs.bi) { setBilingual(true); body.querySelector('[data-tg=bi] .sw').classList.add('on'); } else { const wp = player.playing; setupBilingualVoice().then(() => { if (wp && player.playing) player.play(S.curW); }); } }
       if (k === 'skip') { prefs.skip = !prefs.skip; savePrefs(); sw.classList.toggle('on', prefs.skip); const w = S.curW; player.stop(); renderSection(w); }
     });
-    body.querySelector('#biTo').onchange = e => { prefs.biTo = e.target.value; savePrefs(); renderSection(S.curW, false); if (prefs.bi) ensureTranslations(); };
+    body.querySelector('#biTo').onchange = async e => { const wp = player.playing, w = S.curW; prefs.biTo = e.target.value; savePrefs(); renderSection(w, false); if (prefs.bi) ensureTranslations(); await S.voiceReady; if (wp) startPlayback(w); };
     body.querySelectorAll('[data-sec]').forEach(r => r.onclick = () => { closeSheet(); gotoSection(+r.dataset.sec, player.playing); });
     body.querySelectorAll('[data-mark]').forEach(r => r.onclick = () => {
       const m = b.marks[+r.dataset.mark]; closeSheet();
@@ -597,21 +618,26 @@ function openLook(focus) {
     <div class="sh-label">${t('brightness')}</div>
     <div class="range-row"><svg viewBox="0 0 24 24" style="width:18px;opacity:.6"><circle cx="12" cy="12" r="4"/></svg><input type="range" id="rgDim" min="0" max="0.55" step="0.01" value="${0.55 - prefs.dim}" style="--p:${pct(0.55 - prefs.dim, 0, .55)}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></div>
     <div class="sh-label" id="lblSize">${t('textSize')}</div>
-    <div class="range-row"><span class="lbl" style="font-size:14px">A</span><input type="range" id="rgFs" min="15" max="28" step="1" value="${prefs.fs}" style="--p:${pct(prefs.fs, 15, 28)}"><span class="lbl" style="font-size:22px">A</span><span class="val" id="fsVal">${prefs.fs}</span></div>
+    <div class="fs-steps" id="fsSteps">${FS_STEPS.map(v => `<button data-v="${v}" style="font-size:${11 + (v - 14) * 0.62}px" aria-label="${v}px">A</button>`).join('')}</div>
+    <div class="range-row"><span class="lbl" style="font-size:13px">A</span><input type="range" id="rgFs" min="${FS_MIN}" max="${FS_MAX}" step="1" value="${prefs.fs}" style="--p:${pct(prefs.fs, FS_MIN, FS_MAX)}"><span class="lbl" style="font-size:24px">A</span><span class="val" id="fsVal">${prefs.fs}</span></div>
     <div class="sh-label">${t('typeface')}</div>
     <div class="segs" id="sgFont"><button data-v="literata" style="font-family:Literata">Literata</button><button data-v="source" style="font-family:'Source Serif 4'">Source</button><button data-v="inter" style="font-family:Inter">Inter</button></div>
     <div class="sh-label">${t('lineSpacing')}</div>
-    <div class="segs" id="sgLh"><button data-v="1.45">≡ S</button><button data-v="1.62">≡ M</button><button data-v="1.85">≡ L</button></div>
+    <div class="segs" id="sgLh"><button data-v="1.4">≡ S</button><button data-v="1.62">≡ M</button><button data-v="1.95">≡ L</button></div>
     <div class="sh-label">${t('alignment')}</div>
     <div class="segs" id="sgAl"><button data-v="justify">${t('justify')}</button><button data-v="left">${t('alignLeft')}</button></div>`, body => {
     const mark = () => { body.querySelectorAll('#sgFont button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.font)); body.querySelectorAll('#sgLh button').forEach(b => b.classList.toggle('on', +b.dataset.v === +prefs.lh)); body.querySelectorAll('#sgAl button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.align)); };
     mark();
     body.querySelectorAll('.theme-sw').forEach(b => b.onclick = () => { prefs.theme = b.dataset.t; savePrefs(); applyLook(); body.querySelectorAll('.theme-sw').forEach(x => x.classList.toggle('on', x === b)); });
-    const fs = body.querySelector('#rgFs'); fs.oninput = () => { prefs.fs = +fs.value; fs.style.setProperty('--p', pct(prefs.fs, 15, 28)); body.querySelector('#fsVal').textContent = prefs.fs; savePrefs(); applyLook(); };
+    const fs = body.querySelector('#rgFs');
+    const setFs = v => { prefs.fs = Math.max(FS_MIN, Math.min(FS_MAX, Math.round(v))); fs.value = prefs.fs; fs.style.setProperty('--p', pct(prefs.fs, FS_MIN, FS_MAX)); body.querySelector('#fsVal').textContent = prefs.fs; body.querySelectorAll('#fsSteps button').forEach(b => b.classList.toggle('on', +b.dataset.v === prefs.fs)); savePrefs(); applyLook(); keepWordInView(); };
+    fs.oninput = () => setFs(+fs.value);
+    body.querySelector('#fsSteps').onclick = e => { const b = e.target.closest('button'); if (b) setFs(+b.dataset.v); };
+    body.querySelectorAll('#fsSteps button').forEach(b => b.classList.toggle('on', +b.dataset.v === prefs.fs));
     const dm = body.querySelector('#rgDim'); dm.oninput = () => { prefs.dim = +(0.55 - dm.value).toFixed(2); dm.style.setProperty('--p', pct(+dm.value, 0, .55)); savePrefs(); applyLook(); };
     body.querySelector('#sgFont').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.font = b.dataset.v; savePrefs(); applyLook(); mark(); };
     body.querySelector('#sgAl').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.align = b.dataset.v; savePrefs(); applyLook(); mark(); };
-    body.querySelector('#sgLh').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.lh = +b.dataset.v; savePrefs(); applyLook(); mark(); };
+    body.querySelector('#sgLh').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.lh = +b.dataset.v; savePrefs(); applyLook(); mark(); keepWordInView(); };
     if (focus === 'size') setTimeout(() => body.querySelector('#lblSize').scrollIntoView({ block: 'start', behavior: 'smooth' }), 80);
   });
 }
@@ -658,31 +684,51 @@ async function openVoices() {
   openSheet(`<div class="sh-title">${t('voice')}<button class="x" data-close>${ICON.x}</button></div>
     <div class="segs" id="sgEng"><button data-v="neural">${t('neural')}</button><button data-v="device">${t('device')}</button></div>
     <div class="note" id="engNote" style="margin:10px 2px 6px"></div>
+    <div class="tlang"><span>${t('textLang')}</span><label class="tl-sel"><span><b id="tlName"></b><small id="tlAuto"></small></span><select id="tlSel" aria-label="${t('textLang')}"></select></label></div>
     <input class="inp vsearch" id="vSearch" placeholder="${t('searchVoices')}" autocomplete="off">
     <div id="vList"><div class="note">${t('loadingVoices')}</div></div>
     <div class="sh-label">${t('relay')}</div>
     <div style="display:flex;gap:8px"><input class="inp" id="relayIn" type="url" autocapitalize="off" placeholder="https://…" value="${esc(prefs.relay || S.cfgRelay || '')}"><button class="chip" id="relayGo" style="height:auto;padding:0 16px">OK</button></div>
     <div class="note">${t('relayHint')}</div>`, async body => {
     const eng = () => engine();
+    const ui = uiLang();
+    const label = l => { const nat = nativeName(l), loc = langName(l, ui); return nat.toLowerCase() === loc.toLowerCase() ? nat : `${nat} · ${loc}`; };
+    const paintLang = async () => {
+      const bl = S.book.lang, vs = await eng().voices().catch(() => []);
+      const langs = [...new Set([bl, ...Object.keys(CURATED), ...vs.map(v => v.lang)])].sort((a, b) => langName(a, ui).localeCompare(langName(b, ui), ui));
+      body.querySelector('#tlName').textContent = label(bl);
+      body.querySelector('#tlAuto').textContent = S.book.langManual ? '' : t('autoDetected');
+      body.querySelector('#tlSel').innerHTML = langs.map(l => `<option value="${l}" ${l === bl ? 'selected' : ''}>${esc(label(l))}</option>`).join('');
+    };
     const paint = async () => {
-      const e = eng(); const neuralSel = prefs.engine !== 'device';
+      const e = eng(); const neuralSel = prefs.engine !== 'device'; const bl = S.book.lang;
       body.querySelectorAll('#sgEng button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'neural') === neuralSel));
       const st = S.neuralOk ? `<span class="status ok"><i></i>${t('online')}</span> · ${t('neuralHint')}` : (e.id === 'neural' ? `<span class="status ok"><i></i>${t('neural')}</span> · ${t('neuralSamples')}` : `<span class="status"><i></i>${t('offline')}</span> · ${t('neuralOffBook')}`);
       body.querySelector('#engNote').innerHTML = neuralSel ? st : t('deviceHint');
       const vs = await e.voices().catch(() => []); const q = body.querySelector('#vSearch').value.trim().toLowerCase();
       const cur = player.voice;
-      const filt = vs.filter(v => !q || (v.name + ' ' + v.locale + ' ' + langName(v.lang) + ' ' + (v.langName || '')).toLowerCase().includes(q));
+      const filt = vs.filter(v => !q || (v.name + ' ' + v.locale + ' ' + langName(v.lang) + ' ' + langName(v.lang, ui) + ' ' + nativeName(v.lang) + ' ' + (v.langName || '')).toLowerCase().includes(q));
       const groups = {};
       for (const v of filt) (groups[v.lang] = groups[v.lang] || []).push(v);
-      const tr = biTarget(); const order = Object.keys(groups).sort((a, b) => (a === lang ? -2 : a === tr ? -1 : 0) - (b === lang ? -2 : b === tr ? -1 : 0) || langName(a).localeCompare(langName(b)));
-      const row = v => `<div class="vrow ${v.id === cur ? 'on' : ''}" data-v="${esc(v.id)}" data-l="${v.lang}"><div class="av" style="background:${AV[v.name.length % AV.length]}">${esc(v.name[0])}</div><div class="tx"><b>${esc(v.name)}</b><small>${esc(v.locale)}${v.detail ? ' · ' + esc(v.detail) : ''}</small></div><button class="pv" data-pv="${esc(v.id)}" aria-label="Preview">${ICON.play}</button>${ICON.check}</div>`;
-      body.querySelector('#vList').innerHTML = order.map(l => `<details class="vgroup" ${l === lang || l === tr || q ? 'open' : ''}><summary><span>${esc(langName(l))}</span><span>${groups[l].length}</span></summary>${groups[l].map(row).join('')}</details>`).join('') || `<div class="note">—</div>`;
+      const tr = prefs.bi ? biTarget() : null;
+      const order = Object.keys(groups).sort((a, b) => (a === bl ? -2 : a === tr ? -1 : 0) - (b === bl ? -2 : b === tr ? -1 : 0) || langName(a, ui).localeCompare(langName(b, ui), ui));
+      const row = v => `<div class="vrow ${v.id === cur ? 'on' : ''}" data-v="${esc(v.id)}" data-l="${v.lang}"><div class="av" style="background:${AV[v.name.length % AV.length]}">${esc(v.name[0])}</div><div class="tx"><b>${esc(v.name)}</b><small>${esc(v.engine === 'neural' ? [regionName(v.locale, ui), v.gender === 'Female' ? '♀' : v.gender === 'Male' ? '♂' : '', v.multi ? t('multilingual') : ''].filter(Boolean).join(' · ') : (v.detail || v.locale))}</small></div><button class="pv${PV.id === v.id ? (PV.loading ? ' loading' : ' playing') : ''}" data-pv="${esc(v.id)}" aria-label="${t('preview')}">${ICON.play}${ICON.stop}</button>${ICON.check}</div>`;
+      const curHas = l => groups[l].some(v => v.id === cur);
+      body.querySelector('#vList').innerHTML = order.map(l => `<details class="vgroup${l === bl ? ' cur' : ''}" ${l === bl || l === tr || q || curHas(l) ? 'open' : ''}><summary><span>${esc(label(l))}${l === bl ? ` <em>${t('thisText')}</em>` : l === tr ? ` <em>${t('translationLang')}</em>` : ''}</span><span>${groups[l].length}</span></summary>${groups[l].map(row).join('')}</details>`).join('') || `<div class="note">—</div>`;
     };
     body.querySelector('#sgEng').onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
+      stopPreview();
       prefs.engine = b.dataset.v === 'device' ? 'device' : 'auto'; savePrefs();
       if (prefs.engine !== 'device' && !S.neuralOk) await checkRelay();
-      const wasPlaying = player.playing; player.stop(); await syncVoice(); paint(); if (wasPlaying) startPlayback(S.curW);
+      const wasPlaying = player.playing; player.stop(); await syncVoice(); paint(); paintLang(); if (wasPlaying) startPlayback(S.curW);
+    };
+    body.querySelector('#tlSel').onchange = async e => {
+      const l = e.target.value; if (!l || l === S.book.lang) return;
+      const wasPlaying = player.playing; player.stop();
+      S.book.lang = l; S.book.langManual = true; await db.set('books', S.book.id, S.book);
+      renderSection(S.curW >= 0 ? S.curW : 0, false); await S.voiceReady;
+      paintLang(); paint(); if (wasPlaying) startPlayback(S.curW >= 0 ? S.curW : 0);
     };
     body.querySelector('#vSearch').oninput = debounce(paint, 150);
     body.querySelector('#relayGo').onclick = async () => {
@@ -692,20 +738,58 @@ async function openVoices() {
     body.querySelector('#vList').onclick = async e => {
       const pv = e.target.closest('[data-pv]');
       const r = e.target.closest('.vrow'); if (!r) return;
-      if (pv) { e.stopPropagation(); previewVoice(r.dataset.v, r.dataset.l); return; }
-      prefs.voices[voiceKey(r.dataset.l)] = r.dataset.v; savePrefs();
-      body.querySelectorAll('.vrow').forEach(x => x.classList.toggle('on', x === r));
-      const wasPlaying = player.playing; await syncVoice(); if (wasPlaying) startPlayback(S.curW);
+      if (pv) { e.preventDefault(); e.stopPropagation(); previewVoice(r.dataset.v, r.dataset.l, pv); return; }
+      stopPreview();
+      // the choice is remembered for the language of the text (or for the translation language in bilingual mode)
+      const bl = S.book.lang, forLang = prefs.bi && r.dataset.l === biTarget() && r.dataset.l !== bl ? r.dataset.l : bl;
+      prefs.voices[voiceKey(forLang)] = r.dataset.v; savePrefs();
+      if (forLang === bl) body.querySelectorAll('.vrow').forEach(x => x.classList.toggle('on', x === r));
+      const wasPlaying = player.playing; await syncVoice(); if (wasPlaying) startPlayback(S.curW); else warmFirst();
     };
-    paint();
-  });
+    paint(); paintLang();
+  }, stopPreview);
 }
-const PREVIEW = { en: 'Hello! I will read your books aloud.', ru: 'Привет! Я прочитаю ваши книги вслух.', de: 'Hallo! Ich lese dir deine Bücher vor.', fr: 'Bonjour ! Je vais vous lire vos livres.', es: '¡Hola! Te leeré tus libros en voz alta.', it: 'Ciao! Leggerò i tuoi libri ad alta voce.', uk: 'Привіт! Я прочитаю ваші книжки вголос.' };
-function previewVoice(id, lang) {
-  const e = engine(); player.pause(); unlockAudio();
-  const text = PREVIEW[lang] || PREVIEW.en;
-  S.prevCtrl?.stop();
-  S.prevCtrl = e.play({ text, map: [{ start: 0, end: text.length, w: 0 }], lang }, { voice: id, rate: 1, onWord: () => {}, onEnd: () => {}, onError: () => toast('✕') });
+/* voice preview: one reusable <audio>, unlocked inside the tap (iOS), previous preview stopped, cached samples */
+const pvAudio = new Audio(); pvAudio.preload = 'auto'; pvAudio.setAttribute('playsinline', '');
+const PV = { id: null, loading: false, token: 0, btn: null, resume: false };
+function pvState(btn, st) {
+  $$('#vList .pv').forEach(b => b.classList.remove('loading', 'playing'));
+  if (btn && st) btn.classList.add(st);
+}
+function stopPreview() {
+  PV.token++; const wasActive = !!PV.id; PV.id = null; PV.loading = false;
+  try { pvAudio.pause(); } catch {}
+  try { if (device.previewing) { speechSynthesis.cancel(); device.previewing = false; } } catch {}
+  pvState(null);
+  if (wasActive && PV.resume) { PV.resume = false; if (S.screen === 'reader' && S.mode === 'listen') player.resume(); }
+}
+function previewVoice(id, lang, btn) {
+  if (PV.id === id) { stopPreview(); return; }            // second tap = stop
+  stopPreview();
+  const my = ++PV.token; PV.id = id; PV.btn = btn;
+  if (player.playing) { player.pause(); PV.resume = true; }
+  const e = engine();
+  const done = () => { if (my === PV.token) { PV.id = null; PV.loading = false; pvState(null); if (PV.resume) { PV.resume = false; if (S.mode === 'listen') player.resume(); } } };
+  if (e.id === 'device') {
+    // Web Speech must be started synchronously inside the tap on iOS
+    device.previewing = true; pvState(btn, 'playing');
+    const u = new SpeechSynthesisUtterance(PREVIEW_TEXT[lang] || PREVIEW_TEXT[(lang || '').slice(0, 2)] || PREVIEW_TEXT.en);
+    const dv = (S.deviceVoices || []).find(x => x.id === id); if (dv) { u.voice = dv.raw; u.lang = dv.raw.lang; } else u.lang = lang;
+    u.onend = u.onerror = () => { device.previewing = false; done(); };
+    try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch { done(); }
+    return;
+  }
+  // unlock the element now, while we are still inside the user gesture
+  const cached = e.previewCached?.(id);
+  pvAudio.onended = done; pvAudio.onerror = null;
+  if (!cached) { PV.loading = true; pvState(btn, 'loading'); try { pvAudio.src = SILENT; pvAudio.play().catch(() => {}); } catch {} }
+  e.preview(id, lang).then(url => {
+    if (my !== PV.token) return;
+    PV.loading = false; pvState(btn, 'playing');
+    pvAudio.src = url; pvAudio.currentTime = 0;
+    const p = pvAudio.play();
+    if (p && p.catch) p.catch(err => { if (my !== PV.token) return; console.warn('preview', err); toast(t('previewFail')); done(); });
+  }).catch(err => { if (my !== PV.token) return; console.warn('preview', err); toast(t('previewFail')); done(); });
 }
 $('#pVoice').onclick = openVoices;
 function openSpeed() {
@@ -794,7 +878,7 @@ async function boot() {
   await loadBooks(); renderLibrary();
   try { const c = await fetch('config.json', { cache: 'no-store' }).then(r => r.json()); S.cfgRelay = c.relay || ''; } catch {}
   checkRelay().then(() => { if (S.book) syncVoice(); });
-  device.voices();
+  device.voices().then(v => { S.deviceVoices = v; });
   $('#pFocus').classList.toggle('on', !!prefs.focus); $('#pBi').classList.toggle('on', !!prefs.bi);
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js?v=' + APP_VERSION).catch(() => {});

@@ -1,7 +1,7 @@
 // Murmur service worker — versioned app-shell cache + runtime font cache.
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const SHELL = `murmur-shell-${VERSION}`, FONTS = 'murmur-fonts-v1';
-const ASSETS = ['./', 'index.html', 'css/app.css?v=1.0.0', 'js/app.js?v=1.0.0', 'js/db.js', 'js/i18n.js', 'js/text.js', 'js/covers.js', 'js/engines.js', 'js/player.js', 'js/translate.js', 'js/stats.js', 'js/quotes.js', 'js/importers.js', 'js/samples.js',
+const ASSETS = ['./', 'index.html', 'css/app.css?v=1.1.0', 'js/app.js?v=1.1.0', 'js/db.js?v=1.1.0', 'js/i18n.js?v=1.1.0', 'js/text.js?v=1.1.0', 'js/covers.js?v=1.1.0', 'js/engines.js?v=1.1.0', 'js/player.js?v=1.1.0', 'js/translate.js?v=1.1.0', 'js/stats.js?v=1.1.0', 'js/quotes.js?v=1.1.0', 'js/importers.js?v=1.1.0', 'js/samples.js?v=1.1.0', 'js/voices.js?v=1.1.0',
   'vendor/pdf.min.js', 'vendor/pdf.worker.min.js', 'vendor/jszip.min.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'audio/index.json', 'config.json'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('murmur-shell-') && k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

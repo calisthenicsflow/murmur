@@ -1,5 +1,5 @@
 // Importers: plain text, PDF (pdf.js), EPUB (JSZip), web article (r.jina.ai reader).
-import { splitSections, detectLang } from './text.js';
+import { splitSections, detectLang, wc } from './text.js?v=1.1.0';
 
 const loadScript = src => new Promise((res, rej) => {
   if (document.querySelector(`script[src="${src}"]`)) return res();
@@ -63,7 +63,7 @@ export async function fromEPUB(file) {
   const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
   const opf = P.parseFromString(await zip.file(opfPath).async('string'), 'application/xml');
   const q = n => opf.getElementsByTagName(n)[0]?.textContent?.trim() || '';
-  const title = q('dc:title') || file.name.replace(/\.epub$/i, ''), author = q('dc:creator'), lang = (q('dc:language') || '').slice(0, 2);
+  const title = q('dc:title') || file.name.replace(/\.epub$/i, ''), author = q('dc:creator'), lang = (q('dc:language') || '').split(/[-_]/)[0].toLowerCase();
   const manifest = {}; for (const it of opf.getElementsByTagName('item')) manifest[it.getAttribute('id')] = it.getAttribute('href');
   const sections = [];
   for (const ref of opf.getElementsByTagName('itemref')) {
@@ -74,14 +74,16 @@ export async function fromEPUB(file) {
     body.querySelectorAll('script,style,sup a[href],nav').forEach(n => n.remove());
     const head = body.querySelector('h1,h2,h3');
     const paras = [...body.querySelectorAll('p,h4,h5,blockquote,li')].map(p => p.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
-    if (paras.join(' ').split(/\s+/).length < 8) continue;
+    if (wc(paras.join(' ')) < 8) continue;
     const ht = head ? head.textContent.replace(/\s+/g, ' ').trim() : '';
     const parts = splitSections(paras.join('\n\n'), ht);
     parts.forEach((p, i) => sections.push({ label: '', title: i === 0 ? ht : p.title, text: p.text }));
   }
   sections.forEach((s, i) => { s.label = `Chapter ${i + 1}`; if (!s.title) s.title = title; });
   const all = sections.map(s => s.text).join(' ');
-  return { title, author, lang: lang || detectLang(all), sections };
+  // the text itself decides (EPUB metadata is often wrong); metadata only helps for languages the detector doesn't know
+  const det = detectLang(all), sample = all.slice(0, 4000);
+  return { title, author, lang: lang && det === 'en' && lang !== 'en' && !/\b(the|and|of)\b/i.test(sample) ? lang : det, sections };
 }
 
 export async function fromURL(url) {
@@ -99,8 +101,8 @@ export async function fromURL(url) {
     .replace(/[*_`]{1,3}([^*_`]+)[*_`]{1,3}/g, '$1')
     .replace(/^[=\-_*]{3,}\s*$/gm, '')
     .replace(/^\|.*\|$/gm, '');
-  const paras = md.split(/\n\s*\n/).map(p => p.replace(/\s+/g, ' ').trim()).filter(p => p.split(' ').length > 3 || /[.!?]$/.test(p));
-  if (paras.join(' ').split(' ').length < 30) throw new Error('empty');
+  const paras = md.split(/\n\s*\n/).map(p => p.replace(/\s+/g, ' ').trim()).filter(p => wc(p) > 3 || /[.!?。！？]$/.test(p));
+  if (wc(paras.join(' ')) < 30) throw new Error('empty');
   const text = paras.join('\n\n');
   return { title: title.trim(), author: new URL(url).hostname.replace(/^www\./, ''), lang: detectLang(text), source: url, sections: splitSections(text, title.trim()) };
 }
