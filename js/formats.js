@@ -1,8 +1,8 @@
 // Universal book import: the format is sniffed from the bytes (magic numbers / zip contents),
 // never trusted from the file name or MIME type (iOS Files often says application/octet-stream).
 // Loaded lazily the first time a file is imported.
-import { splitSections, detectLang, wc } from './text.js?v=1.3.5';
-import { fromText, fromPDF, fromEPUB, mdToText, itemsToBook, joinTitle } from './importers.js?v=1.3.5';
+import { splitSections, detectLang, wc } from './text.js?v=1.3.6';
+import { fromText, fromPDF, fromEPUB, mdToText, itemsToBook, joinTitle } from './importers.js?v=1.3.6';
 
 export class ImportError extends Error { constructor(code, fmt) { super(code); this.code = code; this.fmt = fmt || ''; } }
 

@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.3.5';
+import { db } from './db.js?v=1.3.6';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.5';
-import { coverSVG, autoCover } from './covers.js?v=1.3.5';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.5';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.5';
-import { Player } from './player.js?v=1.3.5';
-import { translateMany } from './translate.js?v=1.3.5';
-import { track, summary } from './stats.js?v=1.3.5';
-import { renderCard, shareCard } from './quotes.js?v=1.3.5';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.5';
-import { SAMPLES } from './samples.js?v=1.3.5';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.6';
+import { coverSVG, autoCover } from './covers.js?v=1.3.6';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.6';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.6';
+import { Player } from './player.js?v=1.3.6';
+import { translateMany } from './translate.js?v=1.3.6';
+import { track, summary } from './stats.js?v=1.3.6';
+import { renderCard, shareCard } from './quotes.js?v=1.3.6';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.6';
+import { SAMPLES } from './samples.js?v=1.3.6';
 
-export const APP_VERSION = '1.3.5';
+export const APP_VERSION = '1.3.6';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -965,11 +965,17 @@ const secName = (x, i, b = S.book) => chapterName(i, Infinity, b);
 
 
 /* ------------------------------ distraction-free (bare) mode ------------------------------ */
+function syncPlayerHeight() {
+  const p = $('#player'), r = $('#reader'); if (!r) return;
+  const show = p && p.classList.contains('show') && !prefs.bare;
+  r.style.setProperty('--player-h', (show ? Math.round(p.offsetHeight) : 0) + 'px');
+}
 function setBare(on, save = true) {
   prefs.bare = !!on; if (save) savePrefs();
   $('#reader').classList.toggle('bare', prefs.bare);
   const b = $('#rdChrome'); b.setAttribute('aria-pressed', prefs.bare); b.setAttribute('aria-label', prefs.bare ? t('showControls') : t('hideControls'));
   if (prefs.bare) hidePop();
+  syncPlayerHeight();
 }
 $('#rdChrome').onclick = e => { e.stopPropagation(); setBare(!prefs.bare); hint('bare'); };
 // tap on an empty part of the page toggles the controls; taps on words keep seeking / opening the popover
@@ -1175,6 +1181,7 @@ function setMode_(m, silent) {
   if (m === 'read') { player.stop(); $$('.w.cw').forEach(x => x.classList.remove('cw')); }
   positionHL();
   if (!silent) hidePop();
+  requestAnimationFrame(syncPlayerHeight);
 }
 $('#dSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.mode === 'listen') { unlockAudio(); warmFirst(); } setMode(b.dataset.mode); };
 
@@ -1898,6 +1905,9 @@ function watchRelay() {
 }
 async function boot() {
   applyLook(); applyI18n();
+  const pl = $('#player'); if (pl && window.ResizeObserver && !pl._phRO) { pl._phRO = new ResizeObserver(() => syncPlayerHeight()); pl._phRO.observe(pl); }
+  addEventListener('resize', syncPlayerHeight);
+  syncPlayerHeight();
   history.replaceState({ screen: 'library' }, '');
   await loadBooks(); renderLibrary();
   // an OCR job interrupted by closing the app continues where it stopped (pages already done are kept)
@@ -1947,5 +1957,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus };
+window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight };
 boot();
