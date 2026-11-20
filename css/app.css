@@ -127,6 +127,7 @@ body.big-type .rd-text p.first::first-letter{float:none;font-size:1.3em;line-hei
 .rd-text .s.sel{background:none}
 .rd-text .w.u{word-break:break-all}
 .hls{position:absolute;left:0;top:0;z-index:0;pointer-events:none}
+.app-ver{margin:16px 8px 4px;text-align:center;font-size:12px;color:var(--muted);letter-spacing:.02em}
 .sels{position:absolute;left:0;top:0;z-index:0;pointer-events:none}
 .sel-band{position:absolute;left:0;top:0;width:0;height:0;border-radius:3px;background:var(--accent-soft);pointer-events:none}
 .hl{position:absolute;left:0;top:0;width:0;height:0;border-radius:5px;background:var(--accent);z-index:0;opacity:0;pointer-events:none;
@@ -522,7 +523,14 @@ textarea{min-height:170px;resize:none;font-family:var(--serif);line-height:1.5}
 #reader.pages .rd-text .w.cw,
 #reader.pages .rd-text .w.split,
 #reader.pages .rd-text .w.cw.split{position:static;z-index:auto;transition:none}
-#reader.pages .rd-text .s{transition:none}
+#reader.pages .rd-text .s,
+#reader.pages .rd-text.listening .s,
+#reader.pages .rd-text.listening .s.cs{transition:none;opacity:1}
+/* Highlight overlay is a sibling of the column box and lives on its own layer
+   so pill moves do not composite with the column text. Do not put transform
+   or contain:layout/paint on #rdFlow: either one clips column overflow, so
+   #rdScroll.scrollWidth collapses to one page and swipe / pageTo break. */
+#reader.pages .hls,#reader.pages .sels{transform:translateZ(0);-webkit-transform:translateZ(0);will-change:transform}
 #reader.pages .rd-head{break-after:avoid;margin-top:0}
 #reader.pages .rd-next{margin-top:18px;break-inside:avoid}
 /* a chapter that starts a new column must not carry its previous-page top margin, or the page sinks */

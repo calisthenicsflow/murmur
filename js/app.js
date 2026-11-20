@@ -1,19 +1,19 @@
-import { db } from './db.js?v=1.4.1';
-import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.4.1';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.4.1';
-import { coverSVG, autoCover } from './covers.js?v=1.4.1';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.4.1';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.4.1';
-import { Player } from './player.js?v=1.4.1';
-import { translateMany } from './translate.js?v=1.4.1';
-import { track, summary } from './stats.js?v=1.4.1';
-import { renderCard, shareCard } from './quotes.js?v=1.4.1';
-import { openStudio, defaultStyle } from './studio.js?v=1.4.1';
-import { presetById, FORMATS } from './qrender.js?v=1.4.1';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.4.1';
-import { SAMPLES } from './samples.js?v=1.4.1';
+import { db } from './db.js?v=1.4.2';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.4.2';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.4.2';
+import { coverSVG, autoCover } from './covers.js?v=1.4.2';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.4.2';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.4.2';
+import { Player } from './player.js?v=1.4.2';
+import { translateMany } from './translate.js?v=1.4.2';
+import { track, summary } from './stats.js?v=1.4.2';
+import { renderCard, shareCard } from './quotes.js?v=1.4.2';
+import { openStudio, defaultStyle } from './studio.js?v=1.4.2';
+import { presetById, FORMATS } from './qrender.js?v=1.4.2';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.4.2';
+import { SAMPLES } from './samples.js?v=1.4.2';
 
-export const APP_VERSION = '1.4.1';
+export const APP_VERSION = '1.4.2';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -586,14 +586,30 @@ function gotoSection(i, play) {
   if (play && !player.playing) startPlayback(S.curW);
 }
 
+/** pages (CSS-column) mode: never toggle classes on in-flow word/sentence spans.
+ *  iOS WebKit re-lays out multi-column boxes on any style change, which is the
+ *  pages-mode flicker during TTS. The orange highlight is painted in #hls, a
+ *  sibling of #rdFlow, from getClientRects only. */
+function pagesLive() { return !!prefs.pages; }
+function clearListenMarks() {
+  $$('#rdText .cw, #rdText .cs, #rdText .split').forEach(x => { x.classList.remove('cw', 'cs', 'split'); });
+}
+function applyListenMarks() {
+  clearListenMarks();
+  if (pagesLive()) return;
+  const active = S.mode === 'listen' && (player.playing || player.paused);
+  if (active && S.wordEls[S.curW]) S.wordEls[S.curW].classList.add('cw');
+  if (S.curS >= 0 && S.sentEls[S.curS]) S.sentEls[S.curS].classList.add('cs');
+}
 function setCurrent(w, fromPlayer) {
   if (!S.model || w < 0 || !S.model.words[w]) return;
   const prev = S.curW; S.curW = w;
   const s = S.model.words[w].s;
-  if (prev >= 0 && S.wordEls[prev]) S.wordEls[prev].classList.remove('cw');
+  const mark = !pagesLive();
+  if (mark && prev >= 0 && S.wordEls[prev]) S.wordEls[prev].classList.remove('cw');
   if (s !== S.curS) {
-    if (S.curS >= 0 && S.sentEls[S.curS]) S.sentEls[S.curS].classList.remove('cs');
-    S.curS = s; S.sentEls[s]?.classList.add('cs');
+    if (mark && S.curS >= 0 && S.sentEls[S.curS]) S.sentEls[S.curS].classList.remove('cs');
+    S.curS = s; if (mark) S.sentEls[s]?.classList.add('cs');
     if (biOn()) ensureTranslations();
     if (fromPlayer && player.engine?.prefetch) warmFirst();
     const sec = S.model.sents[s].sec ?? S.sec;
@@ -607,7 +623,7 @@ function setCurrent(w, fromPlayer) {
     if (fromPlayer) { S.book.pos = placeOf(w); savePosSoon(); updateMarkBtn(); }
   }
   const active = S.mode === 'listen' && (player.playing || player.paused);
-  if (active) S.wordEls[w]?.classList.add('cw');
+  if (mark && active) S.wordEls[w]?.classList.add('cw');
   positionHL();
   if (prefs.focus) focusWord(w);
   if (fromPlayer) autoScroll(w);
@@ -746,11 +762,15 @@ function positionHL(instant) {
   const el = (S.trEl && S.trEl.isConnected && S.trEl) || S.wordEls[S.curW];
   const active = S.mode === 'listen' && (player.playing || player.paused) && el && el.isConnected;
   if (!active) { hideHL(); return; }
-  $$('#rdText .split').forEach(x => x !== el && x.classList.remove('split'));
   const { rects } = wordRect(el);
   let bits = [...rects].filter(r => r.width > 0.5 && r.height > 0.5);
   if (!bits.length) return; // not laid out — the watchdog retries
-  if (bits.length > 1) el.classList.add('split'); else el.classList.remove('split');
+  // .split is only a paint hint for scroll-mode ink; toggling it inside CSS
+  // columns on iOS forces a column re-layout, so skip it in pages mode.
+  if (!pagesLive()) {
+    $$('#rdText .split').forEach(x => x !== el && x.classList.remove('split'));
+    if (bits.length > 1) el.classList.add('split'); else el.classList.remove('split');
+  }
   // CSS auto-hyphenation paints a hyphen at the end of every continued fragment;
   // some engines omit that glyph from getClientRects — grow those fragments so the hyphen sits inside the pill.
   if (bits.length > 1) bits = bits.map((r0, k) => k < bits.length - 1 ? extendHyphenRect(el, r0) : r0);
@@ -1035,7 +1055,9 @@ function setPages(on) {
   const w = S.curW;
   $('#reader').classList.toggle('pages', on);
   const sc = $('#rdScroll'); sc.scrollLeft = 0;
+  applyListenMarks();
   if (on) layoutPages();
+  $('#rdText').classList.toggle('listening', S.mode === 'listen' && !on);
   requestAnimationFrame(() => { if (S.curW >= 0 && w >= 0) scrollToWord(S.curW, false); positionHL(true); updateProgress(); });
 }
 const readPosSoon = debounce(() => {
@@ -1535,9 +1557,13 @@ function wordOnLine(x, y) {
   const hitXY = (e) => ({ x: e.clientX - grabDX, y: e.clientY - grabDY });
   const selFromFinger = (x, y) => {
     const lh = lineH();
-    const above = wordOnLine(x, y - lh);
-    if (above.word >= 0) return { x, y: y - lh, hit: above };
-    // first line / autoscroll top: nothing lives above, so use the word under the finger
+    const y2 = y - 2 * lh; // iOS-style: two lines above the finger, x stays exact
+    const above = wordOnLine(x, y2);
+    if (above.word >= 0) return { x, y: y2, hit: above };
+    // near the top: fall back to one line, then the word under the finger
+    const y1 = y - lh;
+    const mid = wordOnLine(x, y1);
+    if (mid.word >= 0) return { x, y: y1, hit: mid };
     return { x, y, hit: wordOnLine(x, y) };
   };
   const arm = (w) => {
@@ -1678,8 +1704,9 @@ function setMode_(m, silent) {
   $('#dSeg').classList.toggle('listen', m === 'listen');
   $$('#dSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
   $('#player').classList.toggle('show', m === 'listen');
-  $('#rdText').classList.toggle('listening', m === 'listen');
-  if (m === 'read') { player.stop(); $$('.w.cw').forEach(x => x.classList.remove('cw')); }
+  $('#rdText').classList.toggle('listening', m === 'listen' && !pagesLive());
+  if (m === 'read') { player.stop(); clearListenMarks(); }
+  else applyListenMarks();
   positionHL();
   if (!silent) hidePop();
   requestAnimationFrame(syncPlayerHeight);
@@ -2086,6 +2113,7 @@ $('#rdMore').onclick = () => {
     <div class="row" data-tg="pages"><div class="ic">${ICON.pages}</div><div class="tx"><b>${t('pagesMode')}</b><small>${t('pagesHint')}</small></div><i class="sw ${prefs.pages ? 'on' : ''}"></i></div>
     <div class="row" data-tg="followHl"><div class="ic">${ICON.follow}</div><div class="tx"><b>${t('followHl')}</b><small>${t('followHlHint')}</small></div><i class="sw ${followOn() ? 'on' : ''}"></i></div>
     <div class="row" data-tg="skip"><div class="ic">${ICON.wand}</div><div class="tx"><b>${t('skipFiller')}</b><small>${t('skipFillerHint')}</small></div><i class="sw ${prefs.skip ? 'on' : ''}"></i></div>
+    <div class="app-ver" id="appVer">Murmur ${APP_VERSION}</div>
 `, body => {
     body.querySelectorAll('[data-tg]').forEach(r => r.onclick = () => {
       const k = r.dataset.tg, sw = r.querySelector('.sw');
@@ -2480,5 +2508,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
+window.murmur = { S, prefs, player, APP_VERSION, openStudio, pagesLive, applyListenMarks, clearListenMarks, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
 boot();
