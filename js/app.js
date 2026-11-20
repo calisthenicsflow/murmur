@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.3.0';
+import { db } from './db.js?v=1.3.1';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.0';
-import { coverSVG, autoCover } from './covers.js?v=1.3.0';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.3.0';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.0';
-import { Player } from './player.js?v=1.3.0';
-import { translateMany } from './translate.js?v=1.3.0';
-import { track, summary } from './stats.js?v=1.3.0';
-import { renderCard, shareCard } from './quotes.js?v=1.3.0';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.0';
-import { SAMPLES } from './samples.js?v=1.3.0';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.1';
+import { coverSVG, autoCover } from './covers.js?v=1.3.1';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.3.1';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.1';
+import { Player } from './player.js?v=1.3.1';
+import { translateMany } from './translate.js?v=1.3.1';
+import { track, summary } from './stats.js?v=1.3.1';
+import { renderCard, shareCard } from './quotes.js?v=1.3.1';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.1';
+import { SAMPLES } from './samples.js?v=1.3.1';
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.3.1';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -262,7 +262,7 @@ async function ensureOCRListener() {
   o.onOCR((b, x) => {
     // first recognised page decides the language (and so the voice)
     if (x.added && b.sections.length === 1 && !b.langManual) { b.lang = detectLang(b.sections[0].text) || b.lang; db.set('books', b.id, b); if (S.book && S.book.id === b.id) { S.model && renderSection(S.curW > 0 ? S.curW : 0, false); syncVoice(); } }
-    if (x.titled) { b.cover = autoCover(b.title + b.id); db.set('books', b.id, b); renderLibrary(); if (S.book && S.book.id === b.id) { $('#rdMini').textContent = b.title; if (!S.book.sections[S.sec]?.title || true) $('#rdTitle').textContent = b.title; } }
+    if (x.titled) { b.cover = autoCover(b.title + b.id); db.set('books', b.id, b); renderLibrary(); if (S.book && S.book.id === b.id) { $('#rdMini').textContent = chapterName(); $('#rdTitle').textContent = b.title; } }
     if (S.book && S.book.id === b.id) { S.book = b; updateOCRPill(b, x); if (x.added) { updateNextBtn(); if (S.waitNext) { S.waitNext = false; const n = S.model.words.length; if (appendNext()) startPlayback(n); } else requestAnimationFrame(maybeExtend); } }
     if (b.ocr.state === 'done' && !x.page) toast(t('ocrDone'));
   });
@@ -351,26 +351,81 @@ function appendModel(M, i) {
   for (const w of m.words) M.words.push({ ...w, s: w.s + s0 });
   for (const x of m.sents) M.sents.push({ ...x, words: x.words.map(v => v + w0), para: x.para + p0, sec: i });
   for (const x of m.paras) M.paras.push({ ...x, sents: x.sents.map(v => v + s0), sec: i });
-  M.secs.push({ sec: i, w0, s0, p0, nW: m.words.length, nS: m.sents.length });
+  M.secs.push({ sec: i, w0, s0, p0, nW: m.words.length, nS: m.sents.length, nP: m.paras.length });
 }
+function buildWindowModel(a, z) { const M = { paras: [], sents: [], words: [], secs: [] }; for (let i = a; i <= z; i++) appendModel(M, i); return M; }
 const secInfo = sec => S.model?.secs.find(x => x.sec === sec);
 const toGlobal = (sec, w) => { const x = secInfo(sec); return x ? x.w0 + Math.min(Math.max(0, w), Math.max(0, x.nW - 1)) : -1; };
 const toLocal = gw => { const x = S.model.secs.find(v => gw >= v.w0 && gw < v.w0 + v.nW) || S.model.secs[0]; return { sec: x.sec, w: gw - x.w0 }; };
 /** exact reading place of global word gw → saved form (sentence start, chapter-local) */
-const placeOf = gw => { const s = S.model.words[gw].s, w = S.model.sents[s].words[0], L = toLocal(w); return { sec: L.sec, w: L.w, at: Date.now() }; };
+const placeOf = gw => { if (!S.model.words[gw]) gw = Math.max(0, Math.min(S.model.words.length - 1, gw | 0)); const s = S.model.words[gw].s, w = S.model.sents[s].words[0], L = toLocal(w); return { sec: L.sec, w: L.w, at: Date.now() }; };
+/* ------------------------------ the book's own structure ------------------------------ */
+const normTitle = x => String(x || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+/** a title that really is the book's (not a filler: the book title repeated, "Chapter 7", "* * *") */
+function realTitle(x, b = S.book) {
+  const t = (x && x.title || '').trim();
+  if (!t || normTitle(t) === normTitle(b.title) || /^[\s*·•—–\-.~#]+$/.test(t) || !normTitle(t)) return '';
+  return t;
+}
+/** headings shown inside chapter i: [{ p: paragraph index, t, lvl }] */
+function secHeads(i, b = S.book) {
+  const x = b.sections[i]; if (!x) return [];
+  if (x.heads) return x.heads;
+  if (x.page != null) return []; // OCR pages flow on without dividers
+  const t = realTitle(x, b); if (!t) return [];
+  for (let k = i - 1; k >= 0; k--) { const pt = realTitle(b.sections[k], b); if (pt) return pt === t ? [] : [{ p: 0, t, lvl: 1 }]; }
+  return [{ p: 0, t, lvl: 1 }];
+}
+/** the chapter a place belongs to (for the header line and the position card) */
+function chapterName(sec = S.sec, lp = Infinity, b = S.book) {
+  if (!b) return '';
+  for (let i = sec; i >= 0; i--) {
+    const x = b.sections[i]; if (!x) continue;
+    const hs = (x.heads || secHeads(i, b)).filter(h => h.lvl <= 1 && (i < sec || h.p <= lp));
+    if (hs.length) return hs[hs.length - 1].t;
+    if (x.heads && x.title && i === sec && x.title !== b.title) return x.title;
+    if (x.page != null) return b.title;
+  }
+  return b.title;
+}
+/** the book's Contents: [{ t, lvl, sec, p }] — exactly the book's headings (OCR books: their pages) */
+function bookToc(b = S.book) {
+  if (!b) return [];
+  if (b._toc && b._toc.n === b.sections.length && b._toc.v === 2) return b._toc.list;
+  const list = [];
+  if (b.sections.some(x => x.heads)) b.sections.forEach((x, i) => (x.heads || []).forEach(h => list.push({ t: h.t, lvl: h.lvl, sec: i, p: h.p })));
+  else if (b.sections.some(x => x.page != null)) b.sections.forEach((x, i) => list.push({ t: secLabel(x) || `${t('pageShort')} ${x.page}`, lvl: 2, sec: i, p: 0 }));
+  else b.sections.forEach((x, i) => secHeads(i, b).forEach(h => list.push({ t: h.t, lvl: /^(часть|part|книга|book|том|volume)(?![\p{L}\p{N}])/iu.test(h.t) ? 0 : 1, sec: i, p: 0 })));
+  Object.defineProperty(b, '_toc', { value: { n: b.sections.length, v: 2, list }, configurable: true, writable: true, enumerable: false });
+  return list;
+}
+/** chapter-local index of the first word of paragraph p (Contents entries point at paragraphs) */
+function paraWord(sec, p) {
+  const m = secModel(sec);
+  for (let k = Math.max(0, p); k < m.paras.length; k++) if (m.paras[k].sents.length) return m.sents[m.paras[k].sents[0]].words[0];
+  return 0;
+}
+function headHtml(hs, atStart, i) {
+  return `<div class="hd${atStart ? ' hd-start' : ''}${hs.some(h => h.lvl <= 1) ? ' hd-ch' : ''}" data-sec="${i}">` + hs.map(h => `<div class="h l${Math.min(2, h.lvl)}">${esc(h.t)}</div>`).join('') + (atStart && hs.some(h => h.lvl <= 1) ? '<div class="hd-orn"><i></i><b></b><i></i></div>' : '') + '</div>';
+}
 function secHtml(i) {
-  const b = S.book, { paras, sents, words } = S.model, tr = S.trans[transKey()] || [], x = b.sections[i];
-  let html = i === S.win.a ? '' : `<div class="ch-div" data-sec="${i}"><i></i><span>${esc(x.label && x.label !== x.title ? secLabel(x) : '')}</span><b>${esc(x.title && x.title !== b.title ? x.title : (secLabel(x) || `${i + 1}`))}</b><i></i></div>`;
-  let first = true;
-  for (const p of paras) {
-    if (p.sec !== i || !p.sents.length) continue;
-    const dc = first && !p.skip && dropCapOK(p, sents, words);
-    html += `<p class="${dc ? 'first' : ''}${p.skip ? ' skip' : ''}">`;
+  const b = S.book, { paras, sents, words } = S.model, tr = trArr(), info = secInfo(i), heads = secHeads(i);
+  let html = '', first = true;
+  for (let lp = 0; lp < info.nP; lp++) {
+    const hs = heads.filter(h => h.p === lp);
+    if (hs.length) html += headHtml(hs, lp === 0, i);
+    const p = paras[info.p0 + lp];
+    if (!p.sents.length) continue;
+    // a drop cap opens a chapter (or the book), never the continuation of one
+    const dc = first && !p.skip && (i === 0 && lp === 0 || hs.some(h => h.lvl <= 1)) && dropCapOK(p, sents, words);
     first = false;
+    html += `<p class="${dc ? 'first' : ''}${p.skip ? ' skip' : ''}">`;
     const firstW = sents[p.sents[0]].words[0];
     for (const s of p.sents) {
       html += `<span class="s" data-s="${s}">` + sents[s].words.map(w => `<span class="w${dc && w === firstW ? ' dcw' : ''}${words[w].say ? '' : ' sk'}${/^\(?(https?:|www\.)/i.test(words[w].t) ? ' u' : ''}" data-w="${w}">${esc(words[w].t)}</span>`).map((h, k) => h + (words[sents[s].words[k]].ns ? '' : ' ')).join('').trimEnd() + '</span>';
-      html += `<span class="tr${tr[s] ? '' : ' load'}" data-t="${s}" dir="auto" lang="${biOn() ? biTarget() : ''}">${tr[s] ? trHtml(tr[s]) : '·'}</span> `;
+      // the placeholder already takes about the room the translation will take, so its arrival barely moves the text
+      const ph = tr[s] ? '' : ` style="min-height:${(Math.max(1, Math.ceil(sents[s].text.length * 0.95 / trCpl())) * 1.5).toFixed(1)}em"`;
+      html += `<span class="tr${tr[s] ? '' : ' load'}"${ph} data-t="${s}" dir="auto" lang="${biOn() ? biTarget() : ''}">${tr[s] ? trHtml(tr[s]) : '·'}</span> `;
     }
     html += '</p>';
   }
@@ -381,18 +436,19 @@ function indexEls(root) {
   root.querySelectorAll('.s').forEach(el => { S.sentEls[+el.dataset.s] = el; });
 }
 function setHead() {
-  const b = S.book, sec = b.sections[S.win.a];
-  $('#rdLabel').textContent = secLabel(sec) || (b.sections.length > 1 ? `${S.win.a + 1} / ${b.sections.length}` : (b.author || shelfName(b.shelf || 'mine')));
-  $('#rdTitle').textContent = sec.title || b.title;
+  const b = S.book;
+  // the book's title page shows only above its very beginning
+  $('#rdHead').hidden = !!(S.win && S.win.a > 0);
+  $('#rdLabel').textContent = b.author || shelfName(b.shelf || 'mine');
+  $('#rdTitle').textContent = b.title;
 }
 /** render the chapter window around S.sec; startWord is a global word index in the (new) window */
 function renderSection(startWord = 0, scroll = true) {
   const b = S.book;
   if (!S.win || S.win.book !== b.id || S.sec < S.win.a || S.sec > S.win.z) S.win = { book: b.id, a: S.sec, z: S.sec };
   S.win.z = Math.min(S.win.z, b.sections.length - 1);
-  const M = { paras: [], sents: [], words: [], secs: [] };
-  for (let i = S.win.a; i <= S.win.z; i++) appendModel(M, i);
-  S.model = M;
+  S.curW = -1; S.curS = -1; // the old place belongs to the old text
+  S.model = buildWindowModel(S.win.a, S.win.z);
   player.setModel(S.model, b.lang);
   setHead();
   const art = $('#rdText');
@@ -408,53 +464,111 @@ function renderSection(startWord = 0, scroll = true) {
   updateNextBtn(); updateOCRPill(b);
   const sw = Math.min(startWord, S.model.words.length - 1);
   setCurrent(Math.max(0, sw), false);
-  $('#rdMini').textContent = b.sections[S.sec]?.title || b.title;
+  $('#rdMini').textContent = chapterName(S.sec, curPara());
   if (prefs.pages) layoutPages();
-  if (scroll) requestAnimationFrame(() => { if (sw > 0) scrollToWord(sw, false); else { $('#rdScroll').scrollTop = 0; $('#rdScroll').scrollLeft = 0; } });
+  if (scroll) { if (sw > 0) scrollToWord(sw, false); else { $('#rdScroll').scrollTop = 0; $('#rdScroll').scrollLeft = 0; } }
   if (biOn()) ensureTranslations();
   updateProgress(); updateMarkBtn();
   if (prefs.focus) renderFocus(true);
-  requestAnimationFrame(() => maybeExtend());
+  // the neighbouring chapters are rendered right away, so text is always there when the reader scrolls
+  ensureWindow(); requestAnimationFrame(() => ensureWindow()); warmModels();
   // voices for this language
   S.voiceReady = syncVoice();
 }
-/** add the next chapter to the end of the flow (DOM and model are extended in place: nothing re-renders,
-    the highlight and playback keep running) */
-function appendNext() {
-  const b = S.book; if (!b || !S.win || S.win.z >= b.sections.length - 1) return false;
-  const i = S.win.z + 1; appendModel(S.model, i); S.win.z = i;
-  const art = $('#rdText'); art.insertAdjacentHTML('beforeend', secHtml(i));
-  indexEls(art.querySelector(`.ch[data-sec="${i}"]`));
+/** local paragraph index of the current place (for the chapter name in the header) */
+function curPara() { const s = S.model?.sents[Math.max(0, S.curS)]; if (!s) return 0; const x = secInfo(s.sec); return x ? s.para - x.p0 : 0; }
+/* ------------------------------ the window of rendered chapters ------------------------------
+   Only a few chapters are in the DOM at a time (the one on screen, at least one before and after, and
+   always several screens of text ahead / behind). Chapters are added and removed in place: kept chapters
+   are not re-rendered (their word / sentence numbers are shifted), playback runs on undisturbed, and the
+   text on screen stays exactly where it is (manual scroll anchoring — iOS Safari has none). */
+function setWindow(a, z) {
+  const b = S.book; if (!b || !S.win || !S.model) return false;
+  a = Math.max(0, a); z = Math.min(b.sections.length - 1, z);
+  const oa = S.win.a, oz = S.win.z;
+  if (a > z || (a === oa && z === oz)) return false;
+  const ka = Math.max(a, oa), kz = Math.min(z, oz);
+  if (ka > kz) return false; // no overlap: callers re-render instead
+  const sc = $('#rdScroll'), art = $('#rdText'), vr = sc.getBoundingClientRect();
+  // anchor: the first paragraph of a kept chapter that is on screen (or nearest to it)
+  let anchor = null, aPos = 0;
+  for (const ch of art.querySelectorAll('.ch')) {
+    const i = +ch.dataset.sec; if (i < ka || i > kz) continue;
+    for (const el of ch.children) { const r = el.getBoundingClientRect(); if (prefs.pages ? r.right > vr.left : r.bottom > vr.top) { anchor = el; aPos = prefs.pages ? r.left : r.top; break; } }
+    if (anchor) break;
+  }
+  if (!anchor) { const ch = art.querySelector(`.ch[data-sec="${ka}"]`); anchor = ch; aPos = ch ? (prefs.pages ? ch.getBoundingClientRect().left : ch.getBoundingClientRect().top) : 0; }
+  const oi = secInfo(ka), M = buildWindowModel(a, z), ni = M.secs.find(x => x.sec === ka);
+  const dw = ni.w0 - oi.w0, ds = ni.s0 - oi.s0, oldEnd = S.model.words.length;
+  S.model = M; S.win.a = a; S.win.z = z;
+  hidePop();
+  art.querySelectorAll('.ch').forEach(el => { const i = +el.dataset.sec; if (i < a || i > z) el.remove(); });
+  if (dw || ds) {
+    art.querySelectorAll('.w').forEach(el => { el.dataset.w = +el.dataset.w + dw; });
+    art.querySelectorAll('.s').forEach(el => { el.dataset.s = +el.dataset.s + ds; });
+    art.querySelectorAll('.tr').forEach(el => { el.dataset.t = +el.dataset.t + ds; });
+    rebaseTrans(ds);
+  }
+  const chs = art.querySelectorAll('.ch'), firstCh = chs[0], lastCh = chs[chs.length - 1];
+  if (a < oa) firstCh.insertAdjacentHTML('beforebegin', Array.from({ length: oa - a }, (_, k) => secHtml(a + k)).join(''));
+  if (z > oz) lastCh.insertAdjacentHTML('afterend', Array.from({ length: z - oz }, (_, k) => secHtml(oz + 1 + k)).join(''));
+  S.wordEls = []; S.sentEls = []; indexEls(art);
+  if (S.curW >= 0) S.curW += dw; if (S.curS >= 0) S.curS += ds;
+  if (S.curW >= M.words.length || S.curW < -1 || (S.curW >= 0 && !M.words[S.curW])) { // its chapter left the window (reader scrolled far away)
+    const vt = sc.getBoundingClientRect(); const el = S.sentEls.find(e => e && (prefs.pages ? e.getBoundingClientRect().right > vt.left : e.getBoundingClientRect().bottom > vt.top));
+    const s0 = el ? +el.dataset.s : 0; S.curS = s0; S.curW = M.sents[s0].words[0];
+  }
+  player.rebase(M, dw, ds, z > oz ? oldEnd + dw : -1);
+  setHead();
+  // keep what's on screen exactly where it was
+  if (anchor && anchor.isConnected) {
+    const r = anchor.getBoundingClientRect(), d = prefs.pages ? r.left - aPos : r.top - aPos;
+    if (Math.abs(d) > 0.5) { S.progScroll = Date.now(); if (prefs.pages) { const k = Math.round(d / pageW()); sc.scrollLeft += k * pageW(); if (S.pgTarget != null) S.pgTarget += k; } else sc.scrollTop += d; }
+  }
   if (biOn()) ensureTranslations();
-  updateNextBtn(); updateProgress();
+  if (prefs.focus) renderFocus(true);
+  positionHL(true); // the highlight box lives in scroll coordinates: follow the moved text
+  updateNextBtn(); updateProgress(); warmModels();
   return true;
 }
-/** add the previous chapter above (re-renders the window, keeping what's on screen exactly in place) */
-function prependPrev() {
-  const b = S.book; if (!b || !S.win || S.win.a <= 0 || S.prepending) return false;
-  S.prepending = true;
-  const sc = $('#rdScroll'), wasPlaying = player.playing, cur = S.curW >= 0 ? toLocal(S.curW) : null;
-  const anchor = S.sentEls.find(el => el && (prefs.pages ? el.getBoundingClientRect().right > 0 : el.getBoundingClientRect().bottom > sc.getBoundingClientRect().top));
-  const aL = anchor ? toLocal(S.model.sents[+anchor.dataset.s].words[0]) : null, aTop = anchor ? anchor.getBoundingClientRect() : null;
-  const keepTr = S.trans[transKey()];
-  S.win.a -= 1; S.sec = Math.max(S.sec, S.win.a);
-  if (keepTr) { const k = transKey(), sh = secModel(S.win.a).sents.length; S.trans[k] = S.trans[k] || []; keepTr.forEach((v, j) => { if (v) S.trans[k][j + sh] = v; }); }
-  const sec0 = S.sec;
-  renderSection(0, false);
-  if (cur) { S.sec = cur.sec; setCurrent(toGlobal(cur.sec, cur.w), false); } else S.sec = sec0;
-  if (anchor && aL) { const el = S.wordEls[toGlobal(aL.sec, aL.w)]; if (el) { const r = el.getBoundingClientRect(); if (prefs.pages) { const pw = pageW(); sc.scrollLeft += Math.round((r.left - aTop.left) / pw) * pw; } else sc.scrollTop += r.top - aTop.top; } }
-  if (wasPlaying && S.curW >= 0) player.play(S.curW);
-  setTimeout(() => { S.prepending = false; }, 300);
-  return true;
+/** keep enough text rendered around the reader: never a blank screen, never a wait */
+function ensureWindow() {
+  const b = S.book; if (!b || S.screen !== 'reader' || !S.win || !S.model || S.flowBusy) return;
+  S.flowBusy = true;
+  try {
+    for (let guard = 0; guard < 6; guard++) {
+      const sc = $('#rdScroll'), vr = sc.getBoundingClientRect(), H = prefs.pages ? (pageW() || innerWidth) : (sc.clientHeight || innerHeight);
+      const chs = [...$('#rdText').querySelectorAll('.ch')]; if (!chs.length) return;
+      const geo = chs.map(el => { const r = el.getBoundingClientRect(); return { sec: +el.dataset.sec, a: prefs.pages ? r.left - vr.left : r.top - vr.top, b: prefs.pages ? r.right - vr.left : r.bottom - vr.top }; });
+      const last = geo[geo.length - 1], firstG = geo[0];
+      const onScreen = geo.find(g => g.b > 0) || last;
+      // the chapter being listened to stays rendered (the highlight lives there); in Read mode only what's on screen matters
+      const curSec = (player.playing || player.paused) && S.curS >= 0 ? S.model.sents[S.curS]?.sec ?? S.sec : onScreen.sec;
+      let a = S.win.a, z = S.win.z;
+      // ahead: at least 4 screens of text and the next chapter after the one on screen
+      if (z < b.sections.length - 1 && (last.b - H < H * 4 || z <= Math.max(onScreen.sec, curSec))) z++;
+      // behind: at least 2 screens and the chapter before (added above without moving the text)
+      else if (a > 0 && (-firstG.a < H * 2 || a >= onScreen.sec)) a--;
+      else {
+        // far away (and not the place being read): let it go, so the page stays light
+        const keepLo = Math.min(onScreen.sec, curSec) - 1, keepHi = Math.max(onScreen.sec, curSec) + 1;
+        const far = geo.filter(g => g.b < -H * 8 && g.sec < keepLo);
+        if (far.length && far[far.length - 1].sec + 1 <= z) a = far[far.length - 1].sec + 1;
+        const below = geo.filter(g => g.a > H * 10 && g.sec > keepHi);
+        if (below.length) z = Math.max(a, below[0].sec - 1);
+        if (a === S.win.a && z === S.win.z) return;
+      }
+      if (!setWindow(a, z)) return;
+    }
+  } finally { S.flowBusy = false; }
 }
-/** keep about a screen of text ahead (and behind, when the reader scrolls up) */
-function maybeExtend() {
-  if (!S.book || S.screen !== 'reader' || !S.win) return;
-  const sc = $('#rdScroll');
-  if (prefs.pages) { const pg = pageInfo(); if (pg.n - pg.i <= 2) appendNext(); return; }
-  if (sc.scrollTop + sc.clientHeight > sc.scrollHeight - sc.clientHeight * 1.5) appendNext();
-  else if (sc.scrollTop < sc.clientHeight * 0.4 && S.win.a > 0 && Date.now() - S.lastUserScroll < 1500) prependPrev();
-}
+// legacy names (OCR, pages): grow the window by one chapter
+function appendNext() { const z0 = S.win?.z; ensureWindow(); if (S.win && S.win.z === z0) setWindow(S.win.a, S.win.z + 1); return !!S.win && S.win.z !== z0; }
+function prependPrev() { const a0 = S.win?.a; if (!S.win || a0 <= 0) return false; setWindow(a0 - 1, S.win.z); return S.win.a !== a0; }
+function maybeExtend() { ensureWindow(); }
+// idle time: prepare the models of the chapters around the window, so adding them later costs nothing
+const idle = window.requestIdleCallback || (f => setTimeout(f, 200));
+function warmModels() { if (!S.book || !S.win) return; idle(() => { const b = S.book; if (!b || !S.win) return; for (const i of [S.win.z + 1, S.win.z + 2, S.win.a - 1]) if (b.sections[i]) secModel(i); }); }
 function gotoSection(i, play) {
   if (!S.book || i < 0 || i >= S.book.sections.length) return;
   jumpTo(i, 0);
@@ -470,9 +584,9 @@ function setCurrent(w, fromPlayer) {
     if (S.curS >= 0 && S.sentEls[S.curS]) S.sentEls[S.curS].classList.remove('cs');
     S.curS = s; S.sentEls[s]?.classList.add('cs');
     const sec = S.model.sents[s].sec ?? S.sec;
+    const cn = chapterName(sec, curPara()); if ($('#rdMini').textContent !== cn) { $('#rdMini').textContent = cn; updateMediaSession(); }
     if (sec !== S.sec) {
       const was = S.sec; S.sec = sec;
-      $('#rdMini').textContent = S.book.sections[sec]?.title || S.book.title; updateMediaSession();
       if (fromPlayer && sec > was && S.timer && S.timer.endOfChapter) setTimeout(() => stopTimer(true), 0); // "end of chapter" sleep timer
     }
     if (prefs.focus) renderFocus();
@@ -537,25 +651,30 @@ function pageInfo() { const sc = $('#rdScroll'), pw = pageW(); return { i: Math.
 const pageOfEl = el => { const sc = $('#rdScroll'), r = el.getBoundingClientRect(), sr = sc.getBoundingClientRect(); return Math.max(0, Math.floor((r.left + r.width / 2 - sr.left + sc.scrollLeft) / pageW())); };
 function pageTo(n, smooth = true) {
   const sc = $('#rdScroll'), pg = pageInfo(); n = Math.max(0, Math.min(pg.n - 1, n));
-  S.progScroll = Date.now(); sc.scrollTo({ left: n * pg.pw, behavior: smooth ? 'smooth' : 'auto' });
+  S.progScroll = Date.now(); S.pgTarget = n; S.pgAt = smooth ? Date.now() : 0; sc.scrollTo({ left: n * pg.pw, behavior: smooth ? 'smooth' : 'auto' });
   const user = Date.now() - S.lastUserScroll < 1000;
   setTimeout(() => { updateProgress(); maybeExtend(); if (user && S.mode === 'read' && !player.playing) { S.progScroll = 0; readPosSoon(); } }, smooth ? 420 : 0);
 }
 /** pages: one column per screen width (set as a CSS variable, so text size / bars / rotation re-paginate) */
 function layoutPages() {
   if (!prefs.pages) return;
-  const sc = $('#rdScroll'); sc.scrollTop = 0; sc.style.setProperty('--pw', pageW() + 'px');
+  const sc = $('#rdScroll'); sc.scrollTop = 0;
+  const pwChanged = S.lastPw !== pageW(); S.lastPw = pageW();
+  sc.style.setProperty('--pw', pageW() + 'px');
   // the page ends above whatever bars are showing (player in Listen, dock in Read; nothing when hidden)
   const sr = sc.getBoundingClientRect(); let bottom = sr.bottom - 26;
   if (!prefs.bare) for (const id of ['#player', '#dock']) { const el = $(id), r = el.getBoundingClientRect(); if (r.height && getComputedStyle(el).opacity !== '0' && (id !== '#player' || el.classList.contains('show'))) bottom = Math.min(bottom, r.top - 14); }
   sc.style.setProperty('--pg-b', Math.max(40, sr.bottom - bottom) + 'px');
-  const el = S.wordEls[S.curW]; if (el) { const p = pageOfEl(el); if (p !== pageInfo().i) pageTo(p, false); }
+  const el = S.wordEls[S.curW]; if (el && (pwChanged || player.playing || player.paused) && !(S.pgAt && Date.now() - S.pgAt < 450)) { const p = pageOfEl(el); if (p !== pageInfo().i) pageTo(p, false); }
   updateProgress();
 }
 function scrollEl(el, smooth = true) {
   if (prefs.pages) return pageTo(pageOfEl(el), smooth);
   const sc = $('#rdScroll'); const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - sc.clientHeight * 0.33;
+  // far jumps go straight there: a long smooth glide would run through chapters that are being added/removed under it
+  if (smooth && Math.abs(top - sc.scrollTop) > sc.clientHeight * 1.5) smooth = false;
   S.progScroll = Date.now(); sc.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
+  if (!smooth) { ensureWindow(); requestAnimationFrame(() => { const t2 = el.isConnected ? el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - sc.clientHeight * 0.33 : null; if (t2 != null && Math.abs(t2 - sc.scrollTop) > 2) { S.progScroll = Date.now(); sc.scrollTop = Math.max(0, t2); } positionHL(true); }); }
 }
 function scrollToWord(w, smooth = true) {
   const el = S.wordEls[w]; if (!el) return;
@@ -570,12 +689,22 @@ function autoScroll(w) {
     if (Date.now() - S.lastUserScroll < 4000) { $('#recenter').classList.add('show'); return; }
     return pageTo(p); // the highlight reached the next page: turn it
   }
-  if (Date.now() - S.lastUserScroll < 4000) { $('#recenter').classList.add('show'); return; }
+  followEl(el);
+}
+/** auto-follow: the page stays still while the spoken line is in the comfortable zone; only when it reaches the
+    bottom quarter (or leaves the screen) one smooth scroll brings it to the upper third. Never under a finger. */
+function followEl(el) {
+  const sc = $('#rdScroll');
+  if (S.touching || Date.now() - S.lastUserScroll < 4000) { $('#recenter').classList.add('show'); return; }
   const y = el.getBoundingClientRect().top - sc.getBoundingClientRect().top;
-  if (y < sc.clientHeight * 0.16 || y > sc.clientHeight * 0.56) { S.autoScrolling = Date.now(); scrollToWord(w); }
+  const H = sc.clientHeight, lh = el.getBoundingClientRect().height || 24;
+  if (y < 0 || y + lh > H * 0.75) { if (S.autoScrolling && Date.now() - S.autoScrolling < 700) return; S.autoScrolling = Date.now(); S.autoScrolls = (S.autoScrolls || 0) + 1; scrollEl(el); }
 }
 $('#recenter').onclick = () => { S.lastUserScroll = 0; $('#recenter').classList.remove('show'); scrollToWord(S.curW); };
 ['touchstart', 'wheel'].forEach(ev => $('#rdScroll').addEventListener(ev, () => { S.lastUserScroll = Date.now(); S.lastInteract = Date.now(); }, { passive: true }));
+// a finger on the text: auto-follow never moves the page under it
+$('#rdScroll').addEventListener('touchstart', () => { S.touching = true; }, { passive: true });
+['touchend', 'touchcancel'].forEach(ev => $('#rdScroll').addEventListener(ev, () => { S.touching = false; S.lastUserScroll = Date.now(); }, { passive: true }));
 $('#rdScroll').addEventListener('scroll', () => {
   hidePop();
   if (prefs.pages && $('#rdScroll').scrollTop) $('#rdScroll').scrollTop = 0; // pages never scroll vertically (scrollIntoView, focus…)
@@ -583,9 +712,10 @@ $('#rdScroll').addEventListener('scroll', () => {
   if (S.mode === 'read' && !player.playing && Date.now() - (S.progScroll || 0) > 900) readPosSoon();
   if (Date.now() - S.lastUserScroll > 4000) $('#recenter').classList.remove('show');
   if (prefs.pages) updateProgressSoon();
-  extendSoon();
+  // close to the edge of what's rendered: add text in this very frame, never a blank screen
+  { const sc = $('#rdScroll'); const H = sc.clientHeight; if (!prefs.pages && (sc.scrollTop + H * 3 > sc.scrollHeight || sc.scrollTop < H * 1.5 && S.win && S.win.a > 0)) ensureWindow(); else flowSoon(); }
 }, { passive: true });
-const extendSoon = debounce(() => maybeExtend(), 120);
+let flowRaf = 0; const flowSoon = () => { if (!flowRaf) flowRaf = requestAnimationFrame(() => { flowRaf = 0; ensureWindow(); }); };
 const updateProgressSoon = debounce(() => updateProgress(), 100);
 // pages: swipe left / right (and wheel, arrow keys on a computer) turn the page with a short slide
 (() => {
@@ -607,6 +737,8 @@ const updateProgressSoon = debounce(() => updateProgress(), 100);
 function turnPage(d) {
   S.lastUserScroll = Date.now(); S.lastInteract = Date.now();
   const pg = pageInfo();
+  // quick taps/swipes: count from the page we are already sliding to, not from the middle of the slide
+  if (S.pgAt && Date.now() - S.pgAt < 450 && S.pgTarget != null) pg.i = S.pgTarget;
   if (d < 0 && pg.i === 0) { if (prependPrev()) requestAnimationFrame(() => pageTo(pageInfo().i - 1)); return; }
   if (d > 0 && pg.i >= pg.n - 1) { if (!appendNext()) return; }
   pageTo(pg.i + d);
@@ -617,19 +749,19 @@ function setPages(on) {
   $('#reader').classList.toggle('pages', on);
   const sc = $('#rdScroll'); sc.scrollLeft = 0;
   if (on) layoutPages();
-  requestAnimationFrame(() => { if (w >= 0) scrollToWord(w, false); positionHL(true); updateProgress(); });
+  requestAnimationFrame(() => { if (S.curW >= 0 && w >= 0) scrollToWord(S.curW, false); positionHL(true); updateProgress(); });
 }
 const readPosSoon = debounce(() => {
   // first sentence visible (top third of the screen, or the current page) → reading position
   const sc = $('#rdScroll'), sr = sc.getBoundingClientRect(), top = sr.top + 90;
   if (prefs.pages) { // the first word on this page (a sentence may have started on the previous one)
     const w = S.wordEls.findIndex(el => { if (!el) return false; const r = el.getBoundingClientRect(); return r.width && r.left >= sr.left - 2 && r.left < sr.right - 2; });
-    if (w >= 0) { const s = S.model.words[w].s; S.curW = w; S.curS = s; S.sec = S.model.sents[s].sec ?? S.sec; $('#rdMini').textContent = S.book.sections[S.sec]?.title || S.book.title; S.book.pos = placeOf(w); savePos(); updateMarkBtn(); updateProgress(); }
+    if (w >= 0) { const s = S.model.words[w].s; S.curW = w; S.curS = s; S.sec = S.model.sents[s].sec ?? S.sec; $('#rdMini').textContent = chapterName(S.sec, curPara()); S.book.pos = placeOf(w); savePos(); updateMarkBtn(); updateProgress(); }
     return;
   }
   for (const el of S.sentEls) {
     if (!el) continue; const r = el.getBoundingClientRect();
-    if (prefs.pages ? r.right > sr.left + 2 && r.left < sr.right : r.bottom > top) { const s = +el.dataset.s; const w = S.model.sents[s].words[0]; S.curW = w; S.curS = s; S.sec = S.model.sents[s].sec ?? S.sec; $('#rdMini').textContent = S.book.sections[S.sec]?.title || S.book.title; S.book.pos = placeOf(w); savePos(); updateMarkBtn(); updateProgress(); break; }
+    if (prefs.pages ? r.right > sr.left + 2 && r.left < sr.right : r.bottom > top) { const s = +el.dataset.s; const w = S.model.sents[s].words[0]; S.curW = w; S.curS = s; S.sec = S.model.sents[s].sec ?? S.sec; $('#rdMini').textContent = chapterName(S.sec, curPara()); S.book.pos = placeOf(w); savePos(); updateMarkBtn(); updateProgress(); break; }
   }
 }, 250);
 const savePos = () => { if (S.book) db.set('books', S.book.id, S.book); };
@@ -685,9 +817,10 @@ function jumpTo(sec, frac = 0, w = null) {
   wi = Math.max(si.w0, Math.min(si.w0 + si.nW - 1, wi));
   wi = S.model.sents[S.model.words[wi].s].words[0];
   setCurrent(wi, false); S.lastUserScroll = 0;
-  requestAnimationFrame(() => { if (wi > 0) scrollToWord(wi, false); else $('#rdScroll').scrollTop = 0; });
   S.sec = sec; b.pos = placeOf(wi); savePos(); updateMarkBtn(); updateProgress();
-  if (wasPlaying) startPlayback(wi);
+  scrollToWord(wi, false); ensureWindow();
+  requestAnimationFrame(() => { if (S.curW >= 0) scrollToWord(S.curW, false); });
+  if (wasPlaying) startPlayback(S.curW);
 }
 /** fraction of the whole book → { sec, frac } */
 function locate(f) {
@@ -698,7 +831,7 @@ function locate(f) {
 // stored generic labels are English ("Chapter 3"): show them in the UI language
 const secLabel = x => { const m = /^Chapter (\d+)$/.exec(x.label || ''); return m ? t('chapterN').replace('{n}', m[1]) : (x.label || ''); };
 const genericLabel = x => /^Chapter \d+$/.test(x.label || '');
-const secName = (x, i, b = S.book) => (x.title && x.title !== b.title ? x.title : '') || (x.text || '').replace(/\s+/g, ' ').trim().split(' ').slice(0, 7).join(' ') + '…';
+const secName = (x, i, b = S.book) => chapterName(i, Infinity, b);
 
 
 /* ------------------------------ distraction-free (bare) mode ------------------------------ */
@@ -822,9 +955,11 @@ function unlockAudio() { try { engine().unlock?.(); } catch {} }
 async function startPlayback(w) {
   setMode('listen', true);
   $('#pPlay').classList.add('loading');
+  // the place as chapter + word: word numbers shift if chapters are added above while we wait
+  const L = S.model && S.model.words[w] ? toLocal(w) : null;
   await S.voiceReady; // voice for this book's language must be resolved first
   player.engine = engine();
-  player.play(w);
+  player.play(L && secInfo(L.sec) ? toGlobal(L.sec, L.w) : w);
   updateMediaSession();
 }
 player.on.word = w => { $('#pPlay').classList.remove('loading'); setCurrent(w, true); };
@@ -838,7 +973,9 @@ player.on.state = () => {
 };
 player.on.end = () => {
   if (S.timer && S.timer.endOfChapter) { stopTimer(true); return; }
-  if (S.book && S.win && S.win.z < S.book.sections.length - 1) { const n = S.model.words.length; appendNext(); startPlayback(n); }
+  const after = (() => { const w = player.cur, s = S.model?.words[w]?.s; return s != null ? S.model.sents[s].words.slice(-1)[0] + 1 : S.model?.words.length || 0; })();
+  if (S.model && after < S.model.words.length) { startPlayback(after); return; }
+  if (S.book && S.win && S.win.z < S.book.sections.length - 1) { const n = S.model.words.length; setWindow(S.win.a, S.win.z + 1); startPlayback(n); }
   else if (S.book && S.book.ocr && S.book.ocr.state === 'running') { S.waitNext = true; toast(t('ocrWaiting')); }
   else { toast(t('end')); }
 };
@@ -865,7 +1002,8 @@ player.on.transWord = (s, k) => {
   $('#pPlay').classList.remove('loading');
   S.trEl?.classList.remove('cw'); S.trEl = el; el.classList.add('cw');
   positionHL();
-  if (!prefs.focus && Date.now() - S.lastUserScroll > 4000) { const sc = $('#rdScroll'), r = el.getBoundingClientRect(), b = sc.getBoundingClientRect(); if (r.top < b.top + 90 || r.bottom > b.bottom - sc.clientHeight * 0.42) scrollEl(el); }
+  if (!prefs.focus && !prefs.pages) followEl(el);
+  else if (prefs.pages && !S.touching && Date.now() - S.lastUserScroll > 4000) { const p = pageOfEl(el); if (p !== pageInfo().i) pageTo(p); }
 };
 $('#pPlay').onclick = () => {
   unlockAudio();
@@ -915,13 +1053,13 @@ async function enterTrOnly(to) {
   S.book.trTo = to; await db.set('books', S.book.id, S.book);
   renderSection(w, false); await S.voiceReady;
   toast(t('readingIn').replace('{lang}', uiLang() === 'ru' ? langName(to, 'ru').toLowerCase() : langName(to, uiLang())));
-  if (wasPlaying || S.mode === 'listen') startPlayback(w);
+  if (wasPlaying || S.mode === 'listen') startPlayback(Math.max(0, S.curW));
 }
 async function exitTrOnly() {
   const wasPlaying = player.playing, w = S.curW >= 0 ? S.curW : 0; player.stop();
   delete S.book.trTo; await db.set('books', S.book.id, S.book);
   renderSection(w, false); await S.voiceReady;
-  if (wasPlaying) startPlayback(w);
+  if (wasPlaying) startPlayback(Math.max(0, S.curW));
 }
 /** calm in-app question: "This book is in Russian. Translate it to Arabic and read with this voice?" */
 function askTranslate(from, to, voice) {
@@ -953,6 +1091,15 @@ function voiceForLang(l, eng, vs) {
 }
 const biTarget = () => trOnly() ? S.book.trTo : prefs.biTo && prefs.biTo !== (S.book?.lang) ? prefs.biTo : (S.book?.lang === 'ru' ? 'en' : (uiLang() === 'ru' && S.book?.lang !== 'ru' ? 'ru' : (S.book?.lang === 'en' ? 'ru' : 'en')));
 const transKey = () => S.book ? `${S.book.id}:${S.win ? S.win.a : S.sec}:${biTarget()}` : '';
+const trArr = () => S.trans[transKey()] || [];
+/** the window's first chapter changed: carry the translations over to the new sentence numbers */
+function rebaseTrans(ds) {
+  const k = transKey(); const old = Object.entries(S.trans).find(([key]) => key.startsWith(S.book.id + ':') && key.endsWith(':' + biTarget()) && key !== k);
+  const src = old ? old[1] : S.trans[k]; if (!src) return;
+  const arr = []; src.forEach((v, j) => { if (v && j + ds >= 0) arr[j + ds] = v; });
+  for (const key of Object.keys(S.trans)) if (key.startsWith(S.book.id + ':')) delete S.trans[key];
+  S.trans[k] = arr;
+}
 async function getTrans(s) {
   const k = transKey(); S.trans[k] = S.trans[k] || [];
   if (S.trans[k][s]) return S.trans[k][s];
@@ -961,7 +1108,18 @@ async function getTrans(s) {
   return x;
 }
 function trHtml(x) { const sp = wordSpans(x, biTarget()); let h = '', p = 0; sp.forEach((r, k) => { h += esc(x.slice(p, r.start)) + `<span class="tw" data-k="${k}">${esc(x.slice(r.start, r.end))}</span>`; p = r.end; }); return h + esc(x.slice(p)); }
-function fillTr(s, x) { const el = $(`.tr[data-t="${s}"]`); if (el) { el.innerHTML = trHtml(x); el.classList.remove('load'); } if (prefs.focus && s === S.curS) renderFocus(true); }
+/** characters per line of a translation line (its font is .74 of the text size) */
+function trCpl() { const w = ($('#rdText')?.clientWidth || 340) - 16; return Math.max(18, w / ((prefs.fs || 19) * 0.74 * 0.5)); }
+function fillTr(s, x) {
+  const el = $(`.tr[data-t="${s}"]`);
+  if (el) {
+    // a translation arriving above what's being read must not push the text: keep the reference line where it is
+    const sc = $('#rdScroll'), ref = !prefs.pages && (S.wordEls[S.curW] || null), top = sc.getBoundingClientRect().top;
+    const above = !prefs.pages && el.getBoundingClientRect().top < (ref && ref.isConnected ? ref.getBoundingClientRect().top : top);
+    const h0 = above ? el.getBoundingClientRect().height : 0;
+    el.innerHTML = trHtml(x); el.classList.remove('load'); el.style.minHeight = '';
+    if (above) { const d = el.getBoundingClientRect().height - h0; if (Math.abs(d) > 0.5) { S.progScroll = Date.now(); sc.scrollTop += d; positionHL(true); } }
+  } if (prefs.focus && s === S.curS) renderFocus(true); }
 let trRun = 0;
 async function ensureTranslations() {
   const my = ++trRun, k = transKey(), arr = S.trans[k] = S.trans[k] || [];
@@ -1015,7 +1173,7 @@ function openNav(tab = 'toc') {
   const bp = bookProg(), sec = b.sections[S.sec];
   openSheet(`<div class="sh-title nav-title">${esc(b.title)}<button class="x" data-close>${ICON.x}</button></div>
     <div class="nav-pos">
-      <div class="nav-cur"><b id="navCh">${esc(secName(sec, S.sec))}</b><span id="navPct">${fmtPct(bp.f)}</span></div>
+      <div class="nav-cur"><b id="navCh">${esc(chapterName(S.sec, curPara()))}</b><span id="navPct">${fmtPct(bp.f)}</span></div>
       <input type="range" id="navSeek" min="0" max="1000" step="1" value="${Math.round(bp.f * 1000)}" style="--p:${(bp.f * 100).toFixed(1)}%" aria-label="${t('position')}">
       <div class="nav-meta"><span id="navPrev">${esc(t('youAreHere'))}</span><span id="navLeft">${fmtLeft(bp.left)} ${t('left')}</span></div>
     </div>
@@ -1025,10 +1183,15 @@ function openNav(tab = 'toc') {
     const paint = tb => {
       tab = tb; body.querySelectorAll('#navTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === tb));
       if (tb === 'toc') {
-        const sw = secWords(), tot = sw.reduce((a, x) => a + x, 0) || 1; let acc = 0;
-        list.innerHTML = b.sections.map((x, i) => { const st = acc / tot; acc += sw[i]; return `<div class="row nav-row${i === S.sec ? ' cur' : ''}" data-sec="${i}"><div class="ic nav-n">${i + 1}</div><div class="tx"><b>${esc(secName(x, i))}</b><small>${i === S.sec ? `<em>${t('youAreHere')}</em> · ` : ''}${esc(x.label && x.label !== x.title && !genericLabel(x) ? x.label + ' · ' : '')}${fmtPct(st)}</small></div></div>`; }).join('');
-        list.querySelectorAll('[data-sec]').forEach(r => r.onclick = () => { closeSheet(); jumpTo(+r.dataset.sec, 0); });
-        requestAnimationFrame(() => list.querySelector('.row.cur')?.scrollIntoView({ block: 'center' }));
+        // the book's own Contents: parts and chapters strong, subsections lighter and indented
+        const toc = bookToc(b), sw = secWords(), tot = sw.reduce((a, x) => a + x, 0) || 1, before = [];
+        let acc = 0; sw.forEach((x, k) => { before[k] = acc; acc += x; });
+        const here = { sec: S.sec, p: curPara() };
+        let cur = -1; toc.forEach((e, k) => { if (e.sec < here.sec || e.sec === here.sec && e.p <= here.p) cur = k; });
+        const pf = e => { const ps = (b.sections[e.sec].text || '').split(/\n\s*\n/), all = ps.reduce((a, x) => a + x.length, 0) || 1, pre = ps.slice(0, e.p).reduce((a, x) => a + x.length, 0); return (before[e.sec] + sw[e.sec] * pre / all) / tot; };
+        list.innerHTML = toc.length ? `<div class="toc">` + toc.map((e, k) => `<button class="nav-row toc-row l${Math.min(2, e.lvl)}${k === cur ? ' cur' : ''}" data-k="${k}"><span class="tt">${esc(e.t)}</span><small>${k === cur ? `<em>${t('youAreHere')}</em> · ` : ''}${fmtPct(pf(e))}</small></button>`).join('') + '</div>' : `<div class="note nav-empty">${t('noToc')}</div>`;
+        list.querySelectorAll('[data-k]').forEach(r => r.onclick = () => { const e = toc[+r.dataset.k]; closeSheet(); jumpTo(e.sec, 0, paraWord(e.sec, e.p)); });
+        requestAnimationFrame(() => list.querySelector('.toc-row.cur')?.scrollIntoView({ block: 'center' }));
       } else {
         const marks = b.marks || [], here = curMark() >= 0;
         list.innerHTML = `<button class="nav-add" id="navAdd">${ICON.mark}<span>${here ? t('bookmarkHereDone') : t('bookmarkHere')}</span></button>` + (marks.map((m, i) => `<div class="mk" data-mark="${i}"><div class="row mk-main"><div class="ic">${ICON.mark}</div><div class="tx"><b>${esc(m.text)}</b><small>${esc(secName(b.sections[m.sec] || {}, m.sec))} · ${fmtPct(m.f != null ? m.f : bookProg(m.sec, 0).f)}</small></div></div><button class="mk-del" aria-label="${t('delete')}">${ICON.x}<span>${t('delete')}</span></button></div>`).join('') || `<div class="note nav-empty">${t('noBookmarks')}</div>`);
@@ -1042,7 +1205,7 @@ function openNav(tab = 'toc') {
       const f = rg.value / 1000, L = locate(f), x = b.sections[L.sec];
       rg.style.setProperty('--p', (f * 100) + '%');
       body.querySelector('#navPct').textContent = fmtPct(f);
-      body.querySelector('#navCh').textContent = secName(x, L.sec);
+      body.querySelector('#navCh').textContent = chapterName(L.sec, Math.floor(L.frac * ((x.text || '').split(/\n\s*\n/).length)));
       const txt = (x.text || '').replace(/\s+/g, ' '), at = Math.floor(L.frac * txt.length), st = Math.max(0, txt.lastIndexOf(' ', at - 1) + 1);
       body.querySelector('#navPrev').textContent = '«' + txt.slice(st, st + 46).trim() + '…»';
       body.querySelector('#navLeft').textContent = '';
@@ -1066,7 +1229,7 @@ function wireMark(el, repaint) {
 /* ------------------------------ more sheet ------------------------------ */
 $('#rdMore').onclick = () => {
   const b = S.book;
-  const langs = TR_LANGS.filter(l => l !== b.lang).map(l => `<option value="${l}" ${l === biTarget() ? 'selected' : ''}>${esc(langName(l))}</option>`).join('');
+  const langs = TR_LANGS.filter(l => l !== b.lang).map(l => `<option value="${l}" ${l === biTarget() ? 'selected' : ''}>${esc(langName(l, uiLang()))}</option>`).join('');
   openSheet(`<div class="sh-title">${t('settings')}<button class="x" data-close>${ICON.x}</button></div>
     <div class="row" data-tg="focus"><div class="ic">${ICON.focus}</div><div class="tx"><b>${t('focus')}</b></div><i class="sw ${prefs.focus ? 'on' : ''}"></i></div>
     <div class="row" data-tg="bi"><div class="ic">${ICON.tr}</div><div class="tx"><b>${t('bilingual')}</b></div><i class="sw ${prefs.bi ? 'on' : ''}"></i></div>
@@ -1083,7 +1246,7 @@ $('#rdMore').onclick = () => {
       if (k === 'pages') { setPages(!prefs.pages); sw.classList.toggle('on', prefs.pages); }
       if (k === 'skip') { prefs.skip = !prefs.skip; savePrefs(); sw.classList.toggle('on', prefs.skip); const w = S.curW; player.stop(); renderSection(w); }
     });
-    body.querySelector('#biTo').onchange = async e => { const wp = player.playing, w = S.curW; prefs.biTo = e.target.value; savePrefs(); renderSection(w, false); if (prefs.bi) ensureTranslations(); await S.voiceReady; if (wp) startPlayback(w); };
+    body.querySelector('#biTo').onchange = async e => { const wp = player.playing, w = S.curW; prefs.biTo = e.target.value; savePrefs(); renderSection(w, false); if (prefs.bi) ensureTranslations(); await S.voiceReady; if (wp) startPlayback(Math.max(0, S.curW)); };
   });
 };
 
@@ -1345,7 +1508,7 @@ document.addEventListener('touchstart', () => { S.lastInteract = Date.now(); }, 
 function updateMediaSession() {
   if (!('mediaSession' in navigator) || !S.book) return;
   try {
-    navigator.mediaSession.metadata = new MediaMetadata({ title: S.book.sections[S.sec]?.title || S.book.title, artist: S.book.author || 'Murmur', album: S.book.title, artwork: [{ src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }] });
+    navigator.mediaSession.metadata = new MediaMetadata({ title: chapterName(), artist: S.book.author || 'Murmur', album: S.book.title, artwork: [{ src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }] });
     navigator.mediaSession.setActionHandler('play', () => player.resume());
     navigator.mediaSession.setActionHandler('pause', () => player.pause());
     navigator.mediaSession.setActionHandler('previoustrack', () => player.skip(-1));
@@ -1410,5 +1573,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, positionHL, showPop };
+window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, positionHL, showPop };
 boot();

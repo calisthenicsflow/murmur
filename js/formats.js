@@ -1,8 +1,8 @@
 // Universal book import: the format is sniffed from the bytes (magic numbers / zip contents),
 // never trusted from the file name or MIME type (iOS Files often says application/octet-stream).
 // Loaded lazily the first time a file is imported.
-import { splitSections, detectLang, wc } from './text.js?v=1.3.0';
-import { fromText, fromPDF, fromEPUB, mdToText } from './importers.js?v=1.3.0';
+import { splitSections, detectLang, wc } from './text.js?v=1.3.1';
+import { fromText, fromPDF, fromEPUB, mdToText, itemsToBook, joinTitle } from './importers.js?v=1.3.1';
 
 export class ImportError extends Error { constructor(code, fmt) { super(code); this.code = code; this.fmt = fmt || ''; } }
 
@@ -49,10 +49,10 @@ export function htmlToBook(html, fallbackTitle) {
   const blocks = [];
   const walk = el => {
     for (const c of el.children) {
-      if (c.tagName === 'HR' && c.dataset.pb) { blocks.push({ br: true }); continue; }
+      if (c.tagName === 'HR') continue;
       if (c.matches(BLOCK) && !c.querySelector(BLOCK)) {
         const t = c.textContent.replace(/\s+/g, ' ').trim();
-        if (t) blocks.push({ t, h: /^H[1-3]$/.test(c.tagName) });
+        if (t) blocks.push(/^H[1-3]$/.test(c.tagName) && t.length < 160 ? { h: t, lvl: +c.tagName[1] } : { t });
       } else walk(c);
     }
     // loose text directly inside a container (old MOBI / plain html)
@@ -60,27 +60,8 @@ export function htmlToBook(html, fallbackTitle) {
     if (own && wc(own) > 3) blocks.push({ t: own });
   };
   walk(body);
-  return blocksToBook(blocks, title, lang);
+  return itemsToBook(blocks, title, lang);
 }
-function blocksToBook(blocks, title, lang) {
-  const secs = []; let cur = null;
-  const push = () => { if (cur && wc(cur.paras.join(' ')) > 5) secs.push(cur); cur = null; };
-  for (const b of blocks) {
-    if (b.br) { push(); continue; }
-    if (b.h && b.t.length < 140) { if (cur && cur.paras.length) push(); if (!cur) cur = { title: b.t, paras: [] }; else cur.title = (cur.title ? cur.title + ' · ' : '') + b.t; continue; }
-    if (!cur) cur = { title: '', paras: [] };
-    cur.paras.push(b.t);
-  }
-  push();
-  let sections = [];
-  for (const s of secs) splitSections(s.paras.join('\n\n'), s.title || title).forEach((p, i) => sections.push({ label: '', title: i === 0 && s.title ? s.title : p.title, text: p.text }));
-  // a book cut into hundreds of tiny "chapters" (every heading) reads badly: merge small neighbours
-  if (sections.length > 60) { const m = []; for (const s of sections) { const l = m[m.length - 1]; if (l && wc(l.text) < 400) l.text += '\n\n' + s.text; else m.push(s); } sections = m; }
-  sections.forEach((s, i) => { s.label = sections.length > 1 ? `Chapter ${i + 1}` : ''; if (!s.title) s.title = title; });
-  const all = sections.map(s => s.text).join(' ');
-  return { title, lang: detectLang(all) || lang, sections };
-}
-
 /* ------------------------------ MOBI / AZW / AZW3 / PRC (PalmDOC + KF8) ------------------------------ */
 function palmdoc(src) {
   const out = []; let i = 0;
@@ -148,20 +129,25 @@ export function parseFB2(u8, name) {
   const au = tag(ti, 'author')[0]; const author = au ? ['first-name', 'last-name'].map(k => tag(au, k)[0]?.textContent?.trim()).filter(Boolean).join(' ') : '';
   const body = tag(doc, 'body').find(b => !/notes|comments/i.test(b.getAttribute('name') || '')) || tag(doc, 'body')[0];
   if (!body) throw new ImportError('empty', 'FB2');
-  const blocks = [];
-  const txt = el => el.textContent.replace(/\s+/g, ' ').trim();
-  const walk = el => {
+  const items = [];
+  // footnote references ([52]) are not part of a title
+  const txt = el => { const c = el.cloneNode(true); [...c.getElementsByTagName('a')].forEach(a => { if (/note/i.test(a.getAttribute('type') || '') || /^\s*[\[\(]?\d{1,3}[\]\)]?\s*$/.test(a.textContent)) a.remove(); }); return c.textContent.replace(/\s+/g, ' ').trim(); };
+  const lines = el => { const ps = [...el.children].filter(c => /^(p|subtitle)$/.test(c.localName || c.tagName.toLowerCase())); return ps.length ? ps.map(txt) : [txt(el)]; };
+  // nesting: body > section (depth 1) > section (depth 2)…; a section's <title> is a heading at its depth,
+  // a <subtitle> is a subsection inside it; untitled sections simply continue the text
+  const walk = (el, depth, inVerse) => {
     for (const c of el.children) {
       const n = c.localName || c.tagName.toLowerCase();
-      if (n === 'section') { blocks.push({ br: true }); walk(c); continue; }
-      if (n === 'title') { const t = txt(c); if (t) blocks.push({ t, h: true }); continue; }
-      if (n === 'binary' || n === 'image') continue;
-      if (['p', 'v', 'subtitle', 'text-author'].includes(n)) { const t = txt(c); if (t) blocks.push({ t }); continue; }
-      walk(c); // poem, stanza, cite, epigraph…
+      if (n === 'section') { walk(c, depth + 1, false); continue; }
+      if (n === 'title') { if (inVerse || depth === 0) { if (inVerse) { const t = joinTitle(lines(c)); if (t) items.push({ t }); } continue; } const t = joinTitle(lines(c)); if (t) items.push({ h: t, lvl: depth }); continue; }
+      if (n === 'subtitle') { const t = txt(c); if (t && !inVerse && t.length < 160 && !/^[\s*·•—–-]+$/.test(t)) items.push({ h: t, lvl: depth + 1 }); else if (t) items.push({ t }); continue; }
+      if (n === 'binary' || n === 'image' || n === 'table') continue;
+      if (['p', 'v', 'text-author'].includes(n)) { const t = txt(c); if (t) items.push({ t }); continue; }
+      walk(c, depth, inVerse || n === 'poem' || n === 'epigraph' || n === 'cite'); // poem, stanza, cite, epigraph…
     }
   };
-  walk(body);
-  const r = blocksToBook(blocks, title, (tag(ti, 'lang')[0]?.textContent || '').trim());
+  walk(body, 0, false);
+  const r = itemsToBook(items, title, (tag(ti, 'lang')[0]?.textContent || '').trim(), { dropTitle: false });
   r.author = author; r.title = title;
   return r;
 }
@@ -169,28 +155,34 @@ export function parseFB2(u8, name) {
 /* ------------------------------ DOCX / ODT ------------------------------ */
 async function parseDOCX(zip, name) {
   const x = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml');
-  const blocks = [];
+  const blocks = []; let docTitle = '';
   for (const p of x.getElementsByTagName('w:p')) {
     let t = '';
     for (const n of p.getElementsByTagName('*')) { if (n.tagName === 'w:t') t += n.textContent; else if (n.tagName === 'w:tab' || n.tagName === 'w:br') t += ' '; }
     t = t.replace(/\s+/g, ' ').trim(); if (!t) continue;
-    const st = p.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val') || '';
-    blocks.push({ t, h: /^(heading|title|заголовок)\s?[1-3]?$|^Heading[1-3]$|^Title$/i.test(st) || /^[1-3]$/.test(p.getElementsByTagName('w:outlineLvl')[0]?.getAttribute('w:val') ?? 'x') });
+    const st = p.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val') || '', ol = p.getElementsByTagName('w:outlineLvl')[0]?.getAttribute('w:val');
+    const m = /^(?:heading|заголовок)\s?([1-3])$/i.exec(st);
+    if (/^title$/i.test(st)) { if (!docTitle) docTitle = t; continue; }
+    if (m && t.length < 200) blocks.push({ h: t, lvl: +m[1] });
+    else if (ol != null && /^[0-2]$/.test(ol) && t.length < 200) blocks.push({ h: t, lvl: +ol + 1 });
+    else blocks.push({ t });
   }
-  let title = baseName(name);
+  let title = docTitle || baseName(name);
   const core = zip.file('docProps/core.xml'); if (core) { const c = new DOMParser().parseFromString(await core.async('string'), 'application/xml'); title = c.getElementsByTagName('dc:title')[0]?.textContent?.trim() || title; }
-  return blocksToBook(blocks, title, '');
+  return itemsToBook(blocks, title, '');
 }
 async function parseODT(zip, name) {
   const x = new DOMParser().parseFromString(await zip.file('content.xml').async('string'), 'application/xml');
   const blocks = [];
   for (const el of x.getElementsByTagName('*')) {
     if (el.tagName !== 'text:p' && el.tagName !== 'text:h') continue;
-    const t = el.textContent.replace(/\s+/g, ' ').trim(); if (t) blocks.push({ t, h: el.tagName === 'text:h' && +(el.getAttribute('text:outline-level') || 1) <= 3 });
+    const t = el.textContent.replace(/\s+/g, ' ').trim(); if (!t) continue;
+    const lv = +(el.getAttribute('text:outline-level') || 1);
+    blocks.push(el.tagName === 'text:h' && lv <= 3 && t.length < 200 ? { h: t, lvl: lv } : { t });
   }
   let title = baseName(name);
   const meta = zip.file('meta.xml'); if (meta) { const m = new DOMParser().parseFromString(await meta.async('string'), 'application/xml'); title = m.getElementsByTagName('dc:title')[0]?.textContent?.trim() || title; }
-  return blocksToBook(blocks, title, '');
+  return itemsToBook(blocks, title, '');
 }
 
 /* ------------------------------ RTF ------------------------------ */
@@ -202,6 +194,10 @@ export function parseRTF(u8, name) {
   if (cp === 1252 && /\\fcharset204/.test(s)) cp = 1251;
   const dec = new TextDecoder('windows-' + cp);
   let out = '', bytes = [], i = 0; const stack = []; let st = { skip: false, uc: 1 }, ucSkip = 0;
+  // headings: Word / LibreOffice mark them with \outlinelevelN on the paragraph
+  let pl = -1, segStart = 0; const segs = [];
+  const styleLvl = {}; // paragraph style number → heading level (from the stylesheet: "heading 1" / outline level)
+  { const ss = s.indexOf('{\\stylesheet'); if (ss >= 0) for (const m of s.slice(ss, ss + 200000).matchAll(/\{\\s(\d+)\b([^;{}]*);/g)) { const ol = /\\outlinelevel(\d)/.exec(m[2]), nm = /(heading|заголовок|titre|überschrift)\s*(\d)\s*$/i.exec(m[2]); const l = ol ? +ol[1] : nm ? +nm[2] - 1 : -1; if (l >= 0) styleLvl[m[1]] = l; } }
   const flush = () => { if (bytes.length) { out += dec.decode(Uint8Array.from(bytes)); bytes = []; } };
   const emit = ch => { if (st.skip) return; if (ucSkip > 0) { ucSkip--; return; } flush(); out += ch; };
   while (i < s.length) {
@@ -220,6 +216,10 @@ export function parseRTF(u8, name) {
       if (!m) { i += 2; continue; }
       i += 1 + m[0].length; const w = m[1], arg = m[2];
       if (RTF_SKIP.has(w)) { st.skip = true; continue; }
+      if (w === 'pard') { pl = -1; continue; }
+      if (w === 'outlinelevel' && !st.skip) { pl = +arg; continue; }
+      if (w === 's' && !st.skip && arg != null) { if (styleLvl[arg] != null) pl = styleLvl[arg]; continue; }
+      if ((w === 'par' || w === 'sect' || w === 'page') && !st.skip) { flush(); segs.push({ t: out.slice(segStart), lvl: pl }); out += '\n\n'; segStart = out.length; continue; }
       if (w === 'uc') { st.uc = +arg; continue; }
       if (w === 'u') { let v = +arg; if (v < 0) v += 65536; if (!st.skip) { flush(); out += String.fromCharCode(v); } ucSkip = st.uc; continue; }
       if (RTF_CHAR[w] !== undefined) { emit(RTF_CHAR[w]); continue; }
@@ -228,7 +228,15 @@ export function parseRTF(u8, name) {
     if (c === '\r' || c === '\n') { i++; continue; }
     emit(c); i++;
   }
-  flush();
+  flush(); segs.push({ t: out.slice(segStart), lvl: pl });
+  if (segs.some(x => x.lvl >= 0 && x.lvl <= 2 && x.t.trim())) {
+    const items = []; let ttl = titleFrom(out, name);
+    const fi = segs.findIndex(x => x.t.trim());
+    if (!ttl && fi >= 0) { const f = segs[fi].t.trim(); if (f.length < 90 && segs[fi].lvl < 0) { ttl = f.replace(/\s+/g, ' '); segs[fi].t = ''; } else if (f.length < 90 && segs.filter(x => x.lvl === segs[fi].lvl && x.t.trim()).length === 1) ttl = f.replace(/\s+/g, ' '); }
+    if (!ttl) ttl = goodName(name) || 'Book';
+    for (const x of segs) { if (!x.t.trim()) continue; if (x.lvl >= 0 && x.lvl <= 2 && x.t.trim().length < 200) items.push({ h: x.t, lvl: x.lvl }); else x.t.split(/\n\s*\n/).forEach(t => items.push({ t: t.replace(/\n/g, ' ') })); }
+    return itemsToBook(items, ttl, '');
+  }
   return fromText(out.replace(/\n{3,}/g, '\n\n'), titleFrom(out, name));
 }
 
@@ -241,6 +249,7 @@ function titleFrom(text, name) {
 /* Project Gutenberg licence header / footer are not part of the book */
 function tidy(book) {
   if (!book || !book.sections) return book;
+  if (book.struct) { if (book.title) book.title = book.title.replace(/\s*[|·]\s*Project Gutenberg\s*$/i, '').replace(/^The Project Gutenberg eBook of\s*/i, '').trim(); return book; }
   const S = /\*{0,3}\s*START OF (THE|THIS) PROJECT GUTENBERG E-?BOOK[^*\n]*?(\*{3}|$|\n)/im, E = /\*{0,3}\s*END OF (THE|THIS) PROJECT GUTENBERG E-?BOOK/i;
   let si = book.sections.findIndex(x => S.test(x.text)), ei = book.sections.findIndex(x => E.test(x.text));
   if (si < 0) { const k = book.sections.findIndex(x => /This eBook is for the use of anyone anywhere/i.test(x.text)); if (k >= 0 && k <= 1) { const x = book.sections[k]; const cut = x.text.search(/\n\n(?![^\n]*(Project Gutenberg|eBook|www\.|license|Release date|Language|Credits|Title:|Author:|Most recently updated))/i); x.text = cut > 0 ? x.text.slice(cut).trim() : ''; book.sections = book.sections.slice(k).filter(y => wc(y.text) > 5); } }

@@ -8,6 +8,31 @@ export class Player {
     this.on = { word: () => {}, sentence: () => {}, state: () => {}, end: () => {}, error: () => {}, trans: () => {}, transWord: () => {} };
   }
   setModel(model, lang) { this.stop(); this.model = model; this.lang = lang; this.cur = 0; this.curSent = 0; }
+  /** the reader's window of chapters changed around the text being read: word / sentence numbers shifted by
+      dw / ds (chapters added or removed above), and new text may follow from word `more` on. Playback is not
+      interrupted: the chunk being spoken keeps its own numbers plus an offset, the queued ones are shifted. */
+  rebase(model, dw, ds, more = -1) {
+    this.model = model;
+    if (!this.chunks.length) { this.cur = Math.max(0, this.cur + dw); this.curSent = Math.max(0, this.curSent + ds); return; }
+    if (dw || ds) {
+      this.cur += dw; this.curSent += ds;
+      this.chunks.forEach((c, k) => {
+        if (k === this.ci) { c.offW = (c.offW || 0) + dw; c.offS = (c.offS || 0) + ds; return; } // being spoken: the engine holds the old numbers
+        if (c.map) c.map.forEach(m => { m.w += dw; });
+        if (c.seek != null) c.seek += dw;
+        if (c.sents) c.sents = c.sents.map(x => x + ds);
+        if (c.trans != null) c.trans += ds;
+      });
+    }
+    // chapters removed below: forget what can't be read any more; chapters added below: queue them
+    const n = model.words.length, ns = model.sents.length;
+    this.chunks = this.chunks.filter((c, k) => k <= this.ci || (c.trans != null ? c.trans < ns : c.map.every(m => m.w < n)));
+    if (more >= 0 && more < n && (this.playing || this.paused) && this.ci < this.chunks.length) {
+      const lastC = this.chunks[this.chunks.length - 1];
+      const end = lastC.trans != null ? model.sents[lastC.trans + (lastC === this.chunks[this.ci] ? lastC.offS || 0 : 0)]?.words.slice(-1)[0] : lastC.map[lastC.map.length - 1].w + (lastC === this.chunks[this.ci] ? lastC.offW || 0 : 0);
+      if (end != null && end + 1 >= more - 1) this.chunks.push(...this.build(Math.max(more, end + 1)).filter(c => c.trans != null || c.map.every(m => m.w >= more)));
+    }
+  }
   maxChars() { return this.engine && this.engine.id === 'neural' ? 320 : 200; }
 
   build(fromWord) {
@@ -60,19 +85,22 @@ export class Player {
       if (n.trans === undefined) this.engine.prefetch(n, n.voice || this.voice);
       else if (this.bilingual) { const b = this.bilingual; b.translate(n.trans).then(text => { if (text) (b.engine || this.engine).prefetch({ text, map: [], lang: b.to }, b.voice); }).catch(() => {}); }
     }
-    if (c.trans !== undefined) return this.playTrans(c.trans);
+    if (c.trans !== undefined) return this.playTrans(c);
     this.ctrl = this.engine.play(c, {
       voice: c.voice || this.voice, rate: this.rate, volume: this.volume,
-      onWord: w => { this.cur = w; const s = this.model.words[w].s; if (s !== this.curSent) { this.curSent = s; this.on.sentence(s); } this.on.word(w); },
+      onWord: w => { w += c.offW || 0; if (!this.model.words[w]) return; this.cur = w; const s = this.model.words[w].s; if (s !== this.curSent) { this.curSent = s; this.on.sentence(s); } this.on.word(w); },
       onEnd: () => { this.ci++; this.next(); },
       onError: e => { this.playing = false; this.on.state(); this.on.error(e); }
     });
   }
-  async playTrans(s) {
+  async playTrans(c) {
     const b = this.bilingual; let text = '';
-    try { text = await b.translate(s); } catch {}
-    if (!this.playing || this.chunks[this.ci]?.trans !== s) return;
+    try { text = await b.translate(c.trans); } catch {}
+    if (!this.playing || this.chunks[this.ci] !== c) return;
+    const base = c.offS || 0, s0 = c.trans + base; // shifts while it is spoken accumulate in c.offS
+    const S_ = () => s0 + (c.offS || 0) - base;
     if (!text) { this.ci++; return this.next(); }
+    const s = s0;
     if (b.only) { const w0 = this.model.sents[s].words[0]; this.cur = w0; if (s !== this.curSent) { this.curSent = s; this.on.sentence(s); } this.on.word(w0); }
     this.on.trans(s, true);
     // each translated word is its own map entry so the highlight can walk the translation line
@@ -81,9 +109,9 @@ export class Player {
     const my = this.ci;
     this.ctrl = (b.engine || this.engine).play(chunk, {
       voice: b.voice, rate: this.rate, volume: this.volume,
-      onWord: k => { if (this.ci === my) this.on.transWord(s, k); },
-      onEnd: () => { this.on.trans(s, false); this.ci++; this.next(); },
-      onError: () => { this.on.trans(s, false); this.ci++; this.next(); }
+      onWord: k => { if (this.ci === my) this.on.transWord(S_(), k); },
+      onEnd: () => { this.on.trans(S_(), false); this.ci++; this.next(); },
+      onError: () => { this.on.trans(S_(), false); this.ci++; this.next(); }
     });
   }
   halt() { if (this.ctrl) { this.ctrl.stop(); this.ctrl = null; } }
