@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.3.6';
+import { db } from './db.js?v=1.3.7';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.6';
-import { coverSVG, autoCover } from './covers.js?v=1.3.6';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.6';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.6';
-import { Player } from './player.js?v=1.3.6';
-import { translateMany } from './translate.js?v=1.3.6';
-import { track, summary } from './stats.js?v=1.3.6';
-import { renderCard, shareCard } from './quotes.js?v=1.3.6';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.6';
-import { SAMPLES } from './samples.js?v=1.3.6';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.7';
+import { coverSVG, autoCover } from './covers.js?v=1.3.7';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.7';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.7';
+import { Player } from './player.js?v=1.3.7';
+import { translateMany } from './translate.js?v=1.3.7';
+import { track, summary } from './stats.js?v=1.3.7';
+import { renderCard, shareCard } from './quotes.js?v=1.3.7';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.7';
+import { SAMPLES } from './samples.js?v=1.3.7';
 
-export const APP_VERSION = '1.3.6';
+export const APP_VERSION = '1.3.7';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -627,6 +627,14 @@ function wordRect(el) {
   }
   return { rects: el.getClientRects(), box: el.getBoundingClientRect() };
 }
+/** a single line fragment of a (possibly hyphenated) word — never the union box. */
+function fragBox(el, end) {
+  if (!el) return null;
+  const rs = [...el.getClientRects()].filter(r => r.width > 0.5 && r.height > 0.5);
+  if (rs.length) return rs[end ? rs.length - 1 : 0];
+  const b = el.getBoundingClientRect();
+  return (b.width || b.height) ? b : null;
+}
 /** typographic metrics for a font/size: x-height, cap-height, baseline — not the word's own extenders. */
 function fontInk(cs) {
   const font = cs.font, fs = parseFloat(cs.fontSize) || 18;
@@ -661,44 +669,71 @@ function glyphBox(el, box) {
   const top = baseline - ink - pad, bottom = baseline + pad;
   return { left: box.left, top, width: box.width, height: Math.max(m.fs * 0.85, bottom - top), pad, fs: m.fs, baseline, ink };
 }
-let hlLast = null; // last placement, relative to #rdText: {x, y, w, h, el}
+let hlLast = null; // last placement, relative to the scroller: {x, y, w, h, el, n}
+function hlHost() {
+  let host = $('#hls');
+  if (!host) {
+    host = document.createElement('div'); host.id = 'hls'; host.className = 'hls';
+    const sc = $('#rdScroll'); if (!sc) return null;
+    const old = $('#hl'); if (old && old.parentElement === sc) sc.insertBefore(host, old), old.remove();
+    else sc.insertBefore(host, sc.firstChild);
+  }
+  return host;
+}
+function hlPills(n) {
+  const host = hlHost(); if (!host) return [];
+  while (host.children.length < n) {
+    const d = document.createElement('div'); d.className = 'hl';
+    if (!host.children.length) d.id = 'hl';
+    host.appendChild(d);
+  }
+  [...host.children].forEach((p, i) => {
+    if (i < n) p.classList.add('on');
+    else { p.classList.remove('on'); p.style.width = '0px'; p.style.height = '0px'; }
+  });
+  return [...host.children].slice(0, n);
+}
+function hideHL() { hlPills(0); hlLast = null; }
 function positionHL(instant) {
-  const hl = $('#hl'); if (!hl) return;
   const el = (S.trEl && S.trEl.isConnected && S.trEl) || S.wordEls[S.curW];
   const active = S.mode === 'listen' && (player.playing || player.paused) && el && el.isConnected;
-  if (!active) { hl.classList.remove('on'); hlLast = null; return; }
-  // a word broken across two lines (hyphenation) would make one huge box over both lines:
-  // paint that word inline instead and park the floating box
+  if (!active) { hideHL(); return; }
   $$('#rdText .split').forEach(x => x !== el && x.classList.remove('split'));
-  const { rects, box: r0 } = wordRect(el);
-  if (rects.length > 1) { el.classList.add('split'); hl.classList.remove('on'); hlLast = null; return; }
-  el.classList.remove('split');
-  if (!r0.width && !r0.height) return; // not laid out (hidden / detached) — the watchdog retries
-  const r = el.classList.contains('dcw') ? r0 : glyphBox(el, r0);
-  // equal horizontal pad, shrunk if needed so the box never overlaps the neighbouring word
+  const { rects } = wordRect(el);
+  const bits = [...rects].filter(r => r.width > 0.5 && r.height > 0.5);
+  if (!bits.length) return; // not laid out — the watchdog retries
+  if (bits.length > 1) el.classList.add('split'); else el.classList.remove('split');
+  const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
   const want = Math.max(4, Math.min(7, (parseFloat(getComputedStyle(el).fontSize) || 18) * 0.18));
   const sibs = el.parentElement ? [...el.parentElement.querySelectorAll('.w')] : [];
   const i = sibs.indexOf(el), mid = box => (box.top + box.bottom) / 2;
-  const sameLine = (a, b) => a && Math.abs(mid(a) - mid(b)) < Math.min(a.height, b.height) * 0.55;
-  const prevB = i > 0 ? sibs[i - 1].getBoundingClientRect() : null;
-  const nextB = i < sibs.length - 1 ? sibs[i + 1].getBoundingClientRect() : null;
-  const leftGap = sameLine(prevB, r0) ? r0.left - prevB.right : 24;
-  const rightGap = sameLine(nextB, r0) ? nextB.left - r0.right : 24;
-  const padX = Math.max(0.75, Math.min(want, leftGap / 2 - 0.5, rightGap / 2 - 0.5));
-  // the box lives in the scroller (not in the text), so it works the same for the vertical flow and for pages
-  const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
-  const x = r.left - sr.left + sc.scrollLeft - padX, y = r.top - sr.top + sc.scrollTop, w = r.width + padX * 2, h = r.height;
-  if (hlLast && hlLast.el === el && Math.abs(hlLast.x - x) < .5 && Math.abs(hlLast.y - y) < .5 && Math.abs(hlLast.w - w) < .5 && Math.abs(hlLast.h - h) < .5 && hl.classList.contains('on')) return;
-  // gliding is only for the next word on the same line; moving to another line (or out of a
-  // hidden state, or after a reflow of the same word) jumps, so the box never travels diagonally
-  // across the text — that mid-flight box is what looked "misplaced" next to the drop cap
-  const jump = instant || !hlLast || !hl.classList.contains('on') || hlLast.el === el || Math.abs(hlLast.y - y) > h * 0.5;
-  if (jump) hl.style.transition = 'none';
-  hl.style.transform = `translate(${x}px, ${y}px)`;
-  hl.style.width = w + 'px'; hl.style.height = h + 'px';
-  hl.classList.add('on');
-  if (jump) { hl.offsetWidth; hl.style.transition = ''; }
-  hlLast = { x, y, w, h, el };
+  const sameLine = (a, b) => a && b && Math.abs(mid(a) - mid(b)) < Math.min(a.height, b.height) * 0.55;
+  const prevB = i > 0 ? fragBox(sibs[i - 1], true) : null;
+  const nextB = i < sibs.length - 1 ? fragBox(sibs[i + 1], false) : null;
+  const places = bits.map((r0, k) => {
+    const r = el.classList.contains('dcw') && bits.length === 1 ? { left: r0.left, top: r0.top, width: r0.width, height: r0.height } : glyphBox(el, r0);
+    const leftGap = (k === 0 && sameLine(prevB, r0)) ? r0.left - prevB.right : 24;
+    const rightGap = (k === bits.length - 1 && sameLine(nextB, r0)) ? nextB.left - r0.right : 24;
+    // pad may shrink to 0 so a tight neighbour (drop cap, hyphenated sibling) is never covered
+    const padX = Math.max(0, Math.min(want, leftGap / 2 - 0.5, rightGap / 2 - 0.5));
+    return { x: r.left - sr.left + sc.scrollLeft - padX, y: r.top - sr.top + sc.scrollTop, w: r.width + padX * 2, h: r.height };
+  });
+  // every fragment uses the same x-height-based height; only width follows the glyph run
+  const H = places[0].h;
+  places.forEach(p => { p.h = H; });
+  const p0 = places[0];
+  const same = hlLast && hlLast.el === el && hlLast.n === places.length && Math.abs(hlLast.x - p0.x) < .5 && Math.abs(hlLast.y - p0.y) < .5 && Math.abs(hlLast.w - p0.w) < .5 && Math.abs(hlLast.h - p0.h) < .5 && $('#hl')?.classList.contains('on');
+  if (same) return;
+  const jump = instant || !hlLast || !$('#hl')?.classList.contains('on') || hlLast.el === el || hlLast.n !== places.length || Math.abs(hlLast.y - p0.y) > H * 0.5;
+  const pills = hlPills(places.length);
+  pills.forEach((hl, k) => {
+    const p = places[k];
+    if (jump) hl.style.transition = 'none';
+    hl.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    hl.style.width = p.w + 'px'; hl.style.height = p.h + 'px';
+    if (jump) { hl.offsetWidth; hl.style.transition = ''; }
+  });
+  hlLast = { x: p0.x, y: p0.y, w: p0.w, h: p0.h, el, n: places.length };
 }
 // Anything that reflows the text without resizing #rdText (a late web-font subset such as the
 // Cyrillic drop-cap face, controls hiding, OCR pages arriving, size animations) would leave the
@@ -715,15 +750,50 @@ function pageTo(n, smooth = true) {
   const user = Date.now() - S.lastUserScroll < 1000;
   setTimeout(() => { updateProgress(); maybeExtend(); if (user && S.mode === 'read' && !player.playing) { S.progScroll = 0; readPosSoon(); } }, smooth ? 420 : 0);
 }
+/** resolved safe-area inset in CSS pixels (env() can be 0 in a calc on some WebKit builds). */
+function envInset(side) {
+  let el = envInset._el;
+  if (!el) { el = envInset._el = document.createElement('div'); el.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;left:0;top:0'; document.body.appendChild(el); }
+  el.style.paddingTop = `env(safe-area-inset-${side}, 0px)`;
+  return parseFloat(getComputedStyle(el).paddingTop) || 0;
+}
+/** same top inset as continuous-mode padding: first line sits just under the header. */
+function rdTopPx() { return envInset('top') + 72; }
+/** pin the shell to the visual viewport so the iOS toolbar show/hide never leaves a gap or sinks the page. */
+function syncViewport() {
+  const app = $('#app'), vv = window.visualViewport;
+  if (app && vv && innerWidth < 700) {
+    const top = Math.round(vv.offsetTop), left = Math.round(vv.offsetLeft), w = Math.round(vv.width), h = Math.round(vv.height);
+    const key = `${top}|${left}|${w}|${h}`;
+    if (S._vv !== key) {
+      S._vv = key;
+      if (top || left || Math.abs(h - innerHeight) > 1) {
+        app.style.top = top + 'px'; app.style.left = left + 'px';
+        app.style.width = w + 'px'; app.style.height = h + 'px';
+        app.style.right = 'auto'; app.style.bottom = 'auto';
+      } else {
+        app.style.top = app.style.left = app.style.width = app.style.height = app.style.right = app.style.bottom = '';
+      }
+    }
+  }
+  document.documentElement.style.setProperty('--rd-top', rdTopPx() + 'px');
+  if (prefs.pages) layoutPages();
+}
 /** pages: one column per screen width (set as a CSS variable, so text size / bars / rotation re-paginate) */
 function layoutPages() {
   if (!prefs.pages) return;
   const sc = $('#rdScroll'); sc.scrollTop = 0;
-  const pwChanged = S.lastPw !== pageW(); S.lastPw = pageW();
-  sc.style.setProperty('--pw', pageW() + 'px');
+  const pw = pageW();
+  const pwChanged = S.lastPw !== pw; S.lastPw = pw;
+  const top = rdTopPx();
+  const bottom = 24 + envInset('bottom');
+  const h = Math.max(80, Math.round(sc.clientHeight - top - bottom));
+  sc.style.setProperty('--rd-top', top + 'px');
   // the column height is constant: dock / player overlay the page (with .rd-fade) so showing
   // or hiding the controls never shifts the text
-  sc.style.setProperty('--pg-b', 'calc(24px + var(--safe-b))');
+  sc.style.setProperty('--pg-b', bottom + 'px');
+  sc.style.setProperty('--pg-h', h + 'px');
+  sc.style.setProperty('--pw', pw + 'px');
   const el = S.wordEls[S.curW]; if (el && (pwChanged || player.playing || player.paused) && !(S.pgAt && Date.now() - S.pgAt < 450)) { const p = pageOfEl(el); if (p !== pageInfo().i) pageTo(p, false); }
   updateProgress();
 }
@@ -896,10 +966,10 @@ const savePosSoon = debounce(savePos, 1500);
 const savePosNow = () => { if (S.book && S.screen === 'reader' && S.model && S.curS >= 0) { S.book.pos = placeOf(S.model.sents[S.curS].words[0]); savePos(); } };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') savePosNow(); });
 window.addEventListener('pagehide', savePosNow);
-window.addEventListener('resize', () => { positionHL(true); positionHandles(); });
+window.addEventListener('resize', () => { syncViewport(); positionHL(true); positionHandles(); });
 if (window.visualViewport) {
-  visualViewport.addEventListener('resize', () => { positionHL(true); positionHandles(); });
-  visualViewport.addEventListener('scroll', () => { positionHL(true); positionHandles(); });
+  visualViewport.addEventListener('resize', () => { syncViewport(); positionHL(true); positionHandles(); });
+  visualViewport.addEventListener('scroll', () => { syncViewport(); positionHL(true); positionHandles(); });
 }
 $('#app').addEventListener('scroll', () => { $('#app').scrollLeft = 0; $('#app').scrollTop = 0; });
 document.fonts && document.fonts.ready.then(() => positionHL(true));
@@ -1018,11 +1088,23 @@ $('#rdText').addEventListener('click', e => {
   const wi = +w.dataset.w;
   S.lastInteract = Date.now();
   if (S.mode === 'listen') { unlockAudio(); S.lastUserScroll = 0; startPlayback(wi); return; }
-  showPop(+w.closest('.s').dataset.s, w);
+  const sent = S.model.sents[+w.closest('.s').dataset.s];
+  if (sent?.words?.length) applySel(sent.words[0], sent.words[sent.words.length - 1]);
+  else applySel(wi, wi);
+  showPop(w);
 });
 
 /* ------------------------------ popover & multi-sentence selection ------------------------------ */
-function rangeText(a, b) { return S.model.sents.slice(a, b + 1).map(s => s.text.trim()).join(' '); }
+function rangeText(a, b) {
+  if (a > b) [a, b] = [b, a];
+  const words = S.model?.words; if (!words) return '';
+  let out = '';
+  for (let i = a; i <= b; i++) {
+    const w = words[i]; if (!w) continue;
+    out += w.t + (w.ns ? '' : ' ');
+  }
+  return out.trim();
+}
 function shareBody(text) {
   const author = (S.book?.author || '').trim(), title = (S.book?.title || 'Murmur').trim();
   return `${text}\n\n— ${[author, title].filter(Boolean).join(', ')}`;
@@ -1035,21 +1117,27 @@ async function shareSelection(text) {
   catch { toast('✕'); return 'fail'; }
 }
 function applySel(a, b) {
+  if (!S.wordEls?.length) return;
+  a = Math.max(0, Math.min(S.wordEls.length - 1, a | 0));
+  b = Math.max(0, Math.min(S.wordEls.length - 1, b | 0));
   if (a > b) [a, b] = [b, a];
   S.selRange = { a, b };
   $$('#rdText .s.sel').forEach(x => x.classList.remove('sel'));
-  for (let i = a; i <= b; i++) S.sentEls[i]?.classList.add('sel');
+  $$('#rdText .w.sel').forEach(x => x.classList.remove('sel', 'sel-a', 'sel-b'));
+  for (let i = a; i <= b; i++) S.wordEls[i]?.classList.add('sel');
+  S.wordEls[a]?.classList.add('sel-a');
+  S.wordEls[b]?.classList.add('sel-b');
   positionHandles();
 }
 function scrollerXY(clientX, clientY) {
   const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
   return { x: clientX - sr.left + sc.scrollLeft, y: clientY - sr.top + sc.scrollTop };
 }
-/** first/last word box of a sentence — word spans, not ::first-letter Range quirks. */
+/** first/last fragment box of a word (or of a sentence node, for older callers). */
 function sentEdgeRect(node, end) {
   if (!node || !node.isConnected) return null;
-  const words = node.querySelectorAll('.w');
-  const el = words.length ? words[end ? words.length - 1 : 0] : node;
+  const words = node.classList?.contains('w') ? [node] : node.querySelectorAll?.('.w');
+  const el = (words && words.length) ? words[end ? words.length - 1 : 0] : node;
   const recs = el.getClientRects();
   if (recs.length) return recs[end ? recs.length - 1 : 0];
   const box = el.getBoundingClientRect();
@@ -1057,23 +1145,84 @@ function sentEdgeRect(node, end) {
   const all = node.getClientRects();
   return all.length ? (end ? all[all.length - 1] : all[0]) : box;
 }
-function positionHandles() {
-  const a = $('#selA'), b = $('#selB'), r = S.selRange;
-  if (!a || !b) return;
-  if (!r || !$('#pop').classList.contains('show')) { a.classList.remove('on'); b.classList.remove('on'); a.hidden = true; b.hidden = true; return; }
+function wordEdgeRect(wi, end) {
+  const el = S.wordEls[wi];
+  return sentEdgeRect(el, end);
+}
+/** caret under a point, with handles temporarily hidden so they don't steal the hit. */
+function caretFromPoint(x, y) {
+  const a = $('#selA'), b = $('#selB');
+  const prevA = a?.style.pointerEvents, prevB = b?.style.pointerEvents;
+  if (a) a.style.pointerEvents = 'none';
+  if (b) b.style.pointerEvents = 'none';
+  let range = null, pos = null;
+  try {
+    if (document.caretRangeFromPoint) range = document.caretRangeFromPoint(x, y);
+    else if (document.caretPositionFromPoint) pos = document.caretPositionFromPoint(x, y);
+  } catch {}
+  if (!range && pos?.offsetNode != null) {
+    try { range = document.createRange(); range.setStart(pos.offsetNode, pos.offset); range.collapse(true); } catch { range = null; }
+  }
+  const fromEl = document.elementFromPoint(x, y);
+  if (a) a.style.pointerEvents = prevA || '';
+  if (b) b.style.pointerEvents = prevB || '';
+  let el = null;
+  const node = range?.startContainer;
+  if (node) el = (node.nodeType === 3 ? node.parentElement : node)?.closest?.('#rdText .w');
+  if (!el) el = fromEl?.closest?.('#rdText .w');
+  const word = el && Number.isFinite(+el.dataset.w) ? +el.dataset.w : -1;
+  let box = null;
+  if (range) {
+    box = range.getBoundingClientRect();
+    if (!(box.width || box.height)) {
+      try {
+        if (range.startContainer.nodeType === 3 && range.startOffset < range.startContainer.length) {
+          const tmp = range.cloneRange();
+          tmp.setEnd(range.startContainer, range.startOffset + 1);
+          box = tmp.getBoundingClientRect();
+        } else if (range.startContainer.nodeType === 3 && range.startOffset > 0) {
+          const tmp = range.cloneRange();
+          tmp.setStart(range.startContainer, range.startOffset - 1);
+          box = tmp.getBoundingClientRect();
+        }
+      } catch {}
+    }
+  }
+  return { word, range, box: (box && (box.width || box.height)) ? box : null, el };
+}
+function wordAtPoint(x, y) { return caretFromPoint(x, y).word; }
+function setSelecting(on) {
+  S.selecting = !!on;
+  $('#reader')?.classList.toggle('selecting', !!on);
+  $('#rdScroll')?.classList.toggle('sel-drag', !!on);
+}
+function positionHandles(drag) {
+  const ha = $('#selA'), hb = $('#selB'), r = S.selRange;
+  if (!ha || !hb) return;
+  if (!r) { ha.classList.remove('on'); hb.classList.remove('on'); ha.hidden = true; hb.hidden = true; return; }
   const size = 22;
-  const place = (el, sent, end) => {
-    const node = S.sentEls[sent]; const box = sentEdgeRect(node, end);
-    if (!box || !(box.width + box.height)) { el.classList.remove('on'); el.hidden = true; return; }
-    const p = scrollerXY(end ? box.right : box.left, end ? box.bottom : box.top);
+  const place = (el, clientX, clientY) => {
+    const p = scrollerXY(clientX, clientY);
     el.style.transform = `translate(${p.x - size / 2}px, ${p.y - size / 2}px)`;
     el.hidden = false; el.classList.add('on');
   };
-  place(a, r.a, false); place(b, r.b, true);
+  // while a handle is dragged, keep it under the finger / caret; the other snaps to the range edge
+  if (drag?.which === 'a' && drag.x != null) place(ha, drag.x, drag.y);
+  else {
+    const box = wordEdgeRect(r.a, false);
+    if (!box || !(box.width + box.height)) { ha.classList.remove('on'); ha.hidden = true; }
+    else place(ha, box.left, box.top);
+  }
+  if (drag?.which === 'b' && drag.x != null) place(hb, drag.x, drag.y);
+  else {
+    const box = wordEdgeRect(r.b, true);
+    if (!box || !(box.width + box.height)) { hb.classList.remove('on'); hb.hidden = true; }
+    else place(hb, box.right, box.bottom);
+  }
 }
-function showPop(s, anchor, endS = s) {
-  const a = Math.min(s, endS), b = Math.max(s, endS);
-  applySel(a, b);
+function hideMenu() { $('#pop')?.classList.remove('show'); }
+function showPop(anchor) {
+  const r = S.selRange; if (!r) return;
   const pop = $('#pop');
   hideHint();
   pop.innerHTML = `<div class="trbox" id="popTr"></div>
@@ -1082,91 +1231,184 @@ function showPop(s, anchor, endS = s) {
     <button data-a="share">${ICON.share}<span>${t('shareAction')}</span></button>
     <button data-a="copy">${ICON.copy}<span>${t('copyShort')}</span></button>
     <button data-a="tr">${ICON.tr}<span>${t('translateShort')}</span></button><i class="ptr"></i>`;
-  const r = (anchor || S.sentEls[a]).getBoundingClientRect(); pop.classList.remove('below');
+  const startEl = S.wordEls[r.a], endEl = S.wordEls[r.b];
+  const box = (anchor && anchor.getBoundingClientRect) ? anchor.getBoundingClientRect()
+    : (startEl && endEl) ? (() => { const a = startEl.getBoundingClientRect(), b = endEl.getBoundingClientRect(); return { top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom), left: Math.min(a.left, b.left), width: Math.abs(Math.max(a.right, b.right) - Math.min(a.left, b.left)) }; })()
+    : { top: 80, bottom: 120, left: 20, width: 40 };
+  pop.classList.remove('below');
   pop.style.left = '0px'; pop.style.top = '0px'; pop.classList.add('show');
   const margin = 12, vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight;
   pop.style.left = margin + 'px';
   pop.style.right = margin + 'px';
   pop.style.width = 'auto';
   const pw = pop.offsetWidth, ph = pop.offsetHeight, x = margin;
-  let y = r.top - ph - 12;
-  if (y < 70) { y = r.bottom + 12; pop.classList.add('below'); }
+  let y = box.top - ph - 12;
+  if (y < 70) { y = box.bottom + 12; pop.classList.add('below'); }
   y = Math.max(8, Math.min(y, vh - ph - 8));
   pop.style.top = y + 'px';
-  pop.querySelector('.ptr').style.left = Math.min(pw - 20, Math.max(8, r.left + r.width / 2 - x - 6)) + 'px';
+  pop.querySelector('.ptr').style.left = Math.min(pw - 20, Math.max(8, box.left + box.width / 2 - x - 6)) + 'px';
   positionHandles();
-  const text = rangeText(a, b);
+  const text = rangeText(r.a, r.b);
+  const startW = r.a;
   pop.onclick = async ev => {
     const btn = ev.target.closest('button'); if (!btn) return;
     const act = btn.dataset.a;
-    if (act === 'listen') { hidePop(); unlockAudio(); setMode('listen'); startPlayback(S.model.sents[a].words[0]); }
+    if (act === 'listen') { hidePop(); unlockAudio(); setMode('listen'); startPlayback(startW); }
     if (act === 'quote') { await saveQuote(text); hidePop(); toast(t('quoteSaved')); }
-    if (act === 'share') { const r = await shareSelection(text); if (r !== 'abort') hidePop(); }
+    if (act === 'share') { const res = await shareSelection(text); if (res !== 'abort') hidePop(); }
     if (act === 'copy') { try { await navigator.clipboard.writeText(text); toast(t('copied')); } catch { toast('✕'); } hidePop(); }
     if (act === 'tr') {
-      const box = pop.querySelector('#popTr'); box.textContent = t('translating'); box.classList.add('show');
+      const boxEl = pop.querySelector('#popTr'); boxEl.textContent = t('translating'); boxEl.classList.add('show');
       const to = biTarget(); const [tx] = await translateMany([text], S.book.lang, to).catch(() => [null]);
-      box.textContent = tx || t('translationFail');
+      boxEl.textContent = tx || t('translationFail');
     }
   };
 }
 function hidePop() {
-  $('#pop').classList.remove('show');
-  $$('.s.sel').forEach(x => x.classList.remove('sel'));
+  hideMenu();
+  $$('.s.sel, .w.sel').forEach(x => x.classList.remove('sel', 'sel-a', 'sel-b'));
   S.selRange = null;
+  setSelecting(false);
+  S.selDragging = null;
   ['#selA', '#selB'].forEach(id => { const el = $(id); if (el) { el.hidden = true; el.classList.remove('on'); } });
 }
 document.addEventListener('click', e => { if (!e.target.closest('#pop') && !e.target.closest('#rdText') && !e.target.closest('.sel-handle')) hidePop(); });
+document.addEventListener('selectstart', e => { if (e.target.closest?.('#rdText, #rdScroll, .sel-handle')) e.preventDefault(); });
 
-// long-press a sentence, then drag to extend by whole sentences; handles at the ends adjust the range
+// iOS-style selection: long-press or double-tap-and-hold, then drag word-by-word with the finger.
+// The action menu appears only after the finger is released. Handles follow the caret under the finger.
 (() => {
   const sc = $('#rdScroll');
-  let timer = 0, x0 = 0, y0 = 0, s0 = -1, armed = false, pid = 0;
-  const sentAt = (x, y) => { const n = document.elementFromPoint(x, y)?.closest?.('#rdText .s'); return n ? +n.dataset.s : -1; };
-  const clear = () => { if (timer) { clearTimeout(timer); timer = 0; } };
-  const arm = (s, el) => { armed = true; S.selecting = true; S.suppressTap = Date.now(); try { navigator.vibrate?.(8); } catch {} showPop(s, el, s); };
+  let timer = 0, holdT = 0, x0 = 0, y0 = 0, anchor = -1, armed = false, pid = 0, mode = null;
+  let lastTapT = 0, lastTapX = 0, lastTapY = 0, lastWord = -1;
+  let grabDX = 0, grabDY = 0, autoRaf = 0, lastX = 0, lastY = 0, fixedEnd = -1;
+
+  const clear = () => { if (timer) { clearTimeout(timer); timer = 0; } if (holdT) { clearTimeout(holdT); holdT = 0; } };
+  const hitXY = (e) => ({ x: e.clientX - grabDX, y: e.clientY - grabDY });
+  const arm = (w) => {
+    if (w < 0) return;
+    armed = true; setSelecting(true); S.suppressTap = Date.now(); hideMenu();
+    try { navigator.vibrate?.(8); } catch {}
+    if (!S.selRange) applySel(w, w);
+    positionHandles();
+  };
+  const stopAuto = () => { if (autoRaf) { cancelAnimationFrame(autoRaf); autoRaf = 0; } };
+  const autoScroll = () => {
+    autoRaf = 0;
+    if (!armed && !S.selDragging) return;
+    if (prefs.pages) return; // pages mode has no vertical text scroll
+    const r = sc.getBoundingClientRect();
+    const edge = 56;
+    let dy = 0;
+    if (lastY < r.top + edge) dy = -Math.max(4, Math.min(28, (r.top + edge - lastY) * 0.45));
+    else if (lastY > r.bottom - edge) dy = Math.max(4, Math.min(28, (lastY - (r.bottom - edge)) * 0.45));
+    if (dy) { S.progScroll = Date.now(); sc.scrollTop += dy; }
+    extendTo(lastX, lastY);
+    autoRaf = requestAnimationFrame(autoScroll);
+  };
+  const startAuto = () => { if (!autoRaf) autoRaf = requestAnimationFrame(autoScroll); };
+  const extendTo = (x, y) => {
+    const hit = caretFromPoint(x, y);
+    const w = hit.word >= 0 ? hit.word : lastWord;
+    if (w < 0) return lastWord;
+    lastWord = w;
+    const moving = S.selDragging || (w >= anchor ? 'b' : 'a');
+    if (S.selDragging) {
+      const other = S.selDragging === 'a' ? (fixedEnd >= 0 ? fixedEnd : S.selRange.b) : (fixedEnd >= 0 ? fixedEnd : S.selRange.a);
+      applySel(w, other);
+    } else {
+      applySel(anchor, w);
+    }
+    const box = hit.box;
+    const hx = box ? (moving === 'a' ? box.left : box.right) : x;
+    const hy = box ? (moving === 'a' ? box.top : box.bottom) : y;
+    positionHandles({ which: moving, x: hx, y: hy });
+    return w;
+  };
+  const finish = () => {
+    stopAuto(); clear();
+    const was = armed || S.selDragging;
+    if (was && S.selRange) showPop(S.wordEls[S.selRange.b] || S.wordEls[S.selRange.a]);
+    armed = false; pid = 0; mode = null; grabDX = 0; grabDY = 0; fixedEnd = -1;
+    S.selDragging = null;
+    setSelecting(false);
+    if (was) S.suppressTap = Date.now();
+  };
   const onMove = e => {
     if (pid && e.pointerId !== pid) return;
+    lastX = e.clientX; lastY = e.clientY;
     const dx = e.clientX - x0, dy = e.clientY - y0;
-    if (timer && Math.hypot(dx, dy) > 8) { clear(); return; } // scroll or page swipe — not a selection
-    if (!armed) return;
+    if (timer && Math.hypot(dx, dy) > 8) { clear(); return; } // scroll or page swipe — not a long-press
+    if (mode === 'double' && !armed && Math.hypot(dx, dy) > 6) arm(anchor);
+    if (!armed && !S.selDragging) return;
     S.suppressTap = Date.now();
-    const s = sentAt(e.clientX, e.clientY); if (s >= 0) showPop(s0, S.sentEls[s] || S.sentEls[s0], s);
+    const p = hitXY(e);
+    extendTo(p.x, p.y);
+    startAuto();
   };
   const onUp = e => {
     if (pid && e.pointerId !== pid) return;
-    if (armed) S.suppressTap = Date.now();
-    clear(); armed = false; pid = 0; S.selecting = !!S.selDragging;
+    const now = Date.now();
+    lastTapT = now; lastTapX = e.clientX; lastTapY = e.clientY;
+    if (mode === 'double' && !armed && anchor >= 0) {
+      // quick double-tap: select that word and show the menu
+      applySel(anchor, anchor);
+      S.suppressTap = now;
+      clear(); armed = false; pid = 0; mode = null;
+      setSelecting(false);
+      showPop(S.wordEls[anchor]);
+      return;
+    }
+    finish();
   };
   sc.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.target.closest?.('.sel-handle, button, a, input, select, #pop')) return;
-    const sEl = (e.target.nodeType === 3 ? e.target.parentElement : e.target)?.closest?.('#rdText .s');
-    if (!sEl) { clear(); return; }
-    x0 = e.clientX; y0 = e.clientY; s0 = +sEl.dataset.s; armed = false; pid = e.pointerId; clear();
+    const hit = caretFromPoint(e.clientX, e.clientY);
+    const w = hit.word;
+    const sEl = e.target.closest?.('#rdText .s') || hit.el?.closest?.('.s');
+    if (w < 0 && !sEl) { clear(); return; }
+    x0 = lastX = e.clientX; y0 = lastY = e.clientY; grabDX = 0; grabDY = 0;
+    anchor = w >= 0 ? w : (sEl ? (S.model.sents[+sEl.dataset.s]?.words[0] ?? -1) : -1);
+    armed = false; pid = e.pointerId; mode = 'press'; clear();
+    const isDouble = (Date.now() - lastTapT < 380) && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 28;
     try { sc.setPointerCapture(e.pointerId); } catch {}
-    timer = setTimeout(() => { timer = 0; arm(s0, sEl); }, 450);
+    if (isDouble && anchor >= 0) {
+      mode = 'double';
+      S.suppressTap = Date.now();
+      hidePop();
+      applySel(anchor, anchor);
+      hideMenu();
+      positionHandles();
+      setSelecting(true);
+      // a short hold on the second tap starts an extend-drag
+      holdT = setTimeout(() => { holdT = 0; arm(anchor); }, 140);
+    } else {
+      timer = setTimeout(() => { timer = 0; arm(anchor); }, 450);
+    }
   });
-  // document-level so a drag past the sentence / a missed capture still extends the range
-  document.addEventListener('pointermove', onMove, { passive: true });
+  document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onUp);
-  document.addEventListener('pointercancel', e => { if (!armed) onUp(e); else { clear(); /* keep the selection, just end the drag */ armed = false; pid = 0; S.suppressTap = Date.now(); } });
+  document.addEventListener('pointercancel', e => {
+    if (pid && e.pointerId !== pid) return;
+    lastTapT = Date.now(); lastTapX = e.clientX; lastTapY = e.clientY;
+    if (armed && S.selRange) { S.suppressTap = Date.now(); showPop(S.wordEls[S.selRange.b] || S.wordEls[S.selRange.a]); }
+    stopAuto(); clear(); armed = false; pid = 0; mode = null; S.selDragging = null; setSelecting(false);
+  });
   sc.addEventListener('touchmove', e => { if (armed || S.selDragging) e.preventDefault(); }, { passive: false });
   const wire = (el, which) => {
     el.addEventListener('pointerdown', e => {
       e.preventDefault(); e.stopPropagation();
       try { el.setPointerCapture(e.pointerId); } catch {}
-      S.selDragging = which; S.selecting = true; S.suppressTap = Date.now();
+      S.selDragging = which; setSelecting(true); S.suppressTap = Date.now(); hideMenu();
+      pid = e.pointerId; armed = true; mode = 'handle';
+      const box = el.getBoundingClientRect();
+      grabDX = e.clientX - (box.left + box.width / 2);
+      grabDY = e.clientY - (box.top + box.height / 2);
+      fixedEnd = which === 'a' ? S.selRange?.b : S.selRange?.a;
+      lastX = e.clientX; lastY = e.clientY;
+      startAuto();
     });
-    document.addEventListener('pointermove', e => {
-      if (S.selDragging !== which || !S.selRange) return;
-      const s = sentAt(e.clientX, e.clientY); if (s < 0) return;
-      const a = which === 'a' ? s : S.selRange.a, b = which === 'b' ? s : S.selRange.b;
-      showPop(a, S.sentEls[Math.max(a, b)] || S.sentEls[a], b);
-    });
-    const end = () => { if (S.selDragging !== which) return; S.selDragging = null; S.selecting = false; S.suppressTap = Date.now(); };
-    document.addEventListener('pointerup', end);
-    document.addEventListener('pointercancel', end);
   };
   wire($('#selA'), 'a'); wire($('#selB'), 'b');
 })();
@@ -1316,15 +1558,35 @@ function focusWord(w) {
   const active = S.mode === 'listen' && (player.playing || player.paused);
   cur.classList.toggle('speaking', active);
   cur.querySelectorAll('.w').forEach(el => { const i = +el.dataset.fw; el.classList.toggle('cw', active && i === w); el.classList.toggle('done', active && i < w); });
+  const stage = $('#fStage');
+  let host = stage && stage.querySelector('.f-hls');
+  if (host) host.replaceChildren();
   const el = cur.querySelector('.w.cw');
-  if (el) {
-    const box = el.getBoundingClientRect();
-    const g = glyphBox(el, box);
-    const padX = Math.max(3.5, g.fs * 0.16);
-    el.style.setProperty('--fhl-top', (g.top - box.top).toFixed(2) + 'px');
-    el.style.setProperty('--fhl-h', g.height.toFixed(2) + 'px');
+  if (!el) return;
+  const bits = [...el.getClientRects()].filter(r => r.width > 0.5 && r.height > 0.5);
+  if (!bits.length) return;
+  const g0 = glyphBox(el, bits[0]);
+  const padX = Math.max(3.5, g0.fs * 0.16);
+  if (bits.length === 1) {
+    el.classList.remove('split');
+    const box = bits[0];
+    el.style.setProperty('--fhl-top', (g0.top - box.top).toFixed(2) + 'px');
+    el.style.setProperty('--fhl-h', g0.height.toFixed(2) + 'px');
     el.style.setProperty('--fhl-padx', padX.toFixed(2) + 'px');
+    return;
   }
+  // split across lines: one fixed-height pill per fragment (the ::before box would be the union)
+  el.classList.add('split');
+  if (!host) { host = document.createElement('div'); host.className = 'f-hls'; stage.appendChild(host); }
+  const sr = stage.getBoundingClientRect();
+  bits.forEach(r0 => {
+    const g = glyphBox(el, r0);
+    const pill = document.createElement('i'); pill.className = 'f-hl';
+    pill.style.transform = `translate(${(r0.left - sr.left - padX).toFixed(2)}px, ${(g.top - sr.top).toFixed(2)}px)`;
+    pill.style.width = (r0.width + padX * 2).toFixed(2) + 'px';
+    pill.style.height = g0.height.toFixed(2) + 'px';
+    host.appendChild(pill);
+  });
 }
 function toggleFocus(on = !prefs.focus) { prefs.focus = on; savePrefs(); renderFocus(true); }
 $('#pFocus').onclick = () => toggleFocus();
@@ -1908,6 +2170,7 @@ async function boot() {
   const pl = $('#player'); if (pl && window.ResizeObserver && !pl._phRO) { pl._phRO = new ResizeObserver(() => syncPlayerHeight()); pl._phRO.observe(pl); }
   addEventListener('resize', syncPlayerHeight);
   syncPlayerHeight();
+  syncViewport();
   history.replaceState({ screen: 'library' }, '');
   await loadBooks(); renderLibrary();
   // an OCR job interrupted by closing the app continues where it stopped (pages already done are kept)
@@ -1957,5 +2220,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight };
+window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox };
 boot();
