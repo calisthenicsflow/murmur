@@ -109,7 +109,7 @@ body[data-theme=night]::before{mix-blend-mode:screen;opacity:.09}
 .rd-orn{display:flex;align-items:center;justify-content:center;gap:8px;margin:16px 0 4px}
 .rd-orn i{width:26px;height:1px;background:var(--line);background:color-mix(in srgb,var(--ink) 25%,transparent)}
 .rd-orn b{width:5px;height:5px;transform:rotate(45deg);background:var(--accent)}
-.rd-text{position:relative;padding:16px 26px 10px;overflow-wrap:break-word;font-family:var(--serif);font-size:var(--fs);line-height:var(--lh);color:var(--ink);text-align:justify;hyphens:auto;-webkit-hyphens:auto;font-optical-sizing:auto;text-rendering:optimizeLegibility;transition:font-size .25s var(--ease)}
+.rd-text{position:relative;padding:16px 26px 10px;overflow-wrap:break-word;font-family:var(--serif);font-size:var(--fs);line-height:var(--lh);color:var(--ink);text-align:justify;hyphens:auto;-webkit-hyphens:auto;hyphenate-character:"-";-webkit-hyphenate-character:"-";font-optical-sizing:auto;text-rendering:optimizeLegibility;transition:font-size .25s var(--ease)}
 .rd-text p{margin:0 0 .85em;text-indent:0}
 body.align-left .rd-text{text-align:left}
 .rd-text p+p{text-indent:1.4em}
@@ -155,8 +155,8 @@ body.big-type .rd-text p.first::first-letter{float:none;font-size:1.3em;line-hei
 .dock .timer{min-width:88px;justify-content:center;font-variant-numeric:tabular-nums}
 .dock .timer svg{width:18px;height:18px}
 .dock .timer.active{background:var(--accent);color:var(--accent-ink)}
-.seg{position:relative;display:grid;grid-template-columns:1fr 1fr;height:48px;padding:4px;border-radius:24px;background:var(--pill);box-shadow:0 10px 24px -10px rgba(0,0,0,.55);min-width:148px}
-.seg button{position:relative;z-index:1;width:auto;min-width:0;border-radius:20px;font-size:14px;font-weight:600;color:var(--pill-fg);opacity:.62;transition:color .35s var(--ease),opacity .35s}
+.seg{position:relative;display:grid;grid-template-columns:1fr 1fr;align-items:stretch;height:48px;padding:4px;border-radius:24px;background:var(--pill);box-shadow:0 10px 24px -10px rgba(0,0,0,.55);flex:1 1 auto;min-width:168px;max-width:220px;box-sizing:border-box}
+.seg button{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;width:100%;min-width:0;padding:0 8px;border-radius:20px;font-size:13.5px;font-weight:600;color:var(--pill-fg);opacity:.62;text-align:center;white-space:nowrap;line-height:1;box-sizing:border-box;transition:color .35s var(--ease),opacity .35s}
 .seg button.on{color:var(--pill);opacity:1}
 .seg .knob{position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px) / 2);height:auto;border-radius:20px;background:var(--pill-fg);pointer-events:none;transition:transform .35s var(--ease)}
 .seg.listen .knob{transform:translateX(100%)}
@@ -166,9 +166,10 @@ body.big-type .rd-text p.first::first-letter{float:none;font-size:1.3em;line-hei
 .circle-black.aa{font-family:var(--display);font-weight:600;font-size:18px}
 /* keep the two 48×48 circles perfectly round on a 375-wide phone: shrink the timer + segmented control, never the circles */
 @media (max-width: 400px) {
-  .dock{gap:5px;padding:0 10px calc(var(--safe-b) + 18px)}
-  .dock .timer{min-width:78px;padding:0 10px}
-  .seg{min-width:132px}
+  .dock{gap:4px;padding:0 8px calc(var(--safe-b) + 18px)}
+  .dock .timer{min-width:72px;padding:0 8px;font-size:13px}
+  .seg{min-width:160px;max-width:none}
+  .seg button{font-size:13px;padding:0 6px}
 }
 
 /* player */
@@ -342,7 +343,7 @@ textarea{min-height:170px;resize:none;font-family:var(--serif);line-height:1.5}
 .presets button{flex:1;height:38px;border-radius:12px;background:var(--line);font-size:13px;font-weight:600}
 .presets button.on{background:var(--ink);color:var(--bg)}
 /* popover */
-.pop{position:fixed;z-index:95;display:flex;gap:1px;padding:5px;border-radius:20px;background:var(--pill);color:var(--pill-fg);box-shadow:0 18px 40px -12px rgba(0,0,0,.5);transform:translateY(6px) scale(.96);opacity:0;pointer-events:none;transition:.25s var(--spring);left:12px;right:12px;width:auto;max-width:none;box-sizing:border-box}
+.pop{position:fixed;z-index:95;display:flex;gap:1px;padding:5px;border-radius:20px;background:var(--pill);color:var(--pill-fg);box-shadow:0 18px 40px -12px rgba(0,0,0,.5);transform:translateY(6px) scale(.96);opacity:0;pointer-events:none;transition:opacity .25s var(--spring),transform .25s var(--spring);left:12px;right:12px;width:auto;max-width:none;box-sizing:border-box}
 .pop.show{transform:none;opacity:1;pointer-events:auto}
 .pop button{display:flex;flex:1 1 0;flex-direction:column;align-items:center;gap:3px;padding:8px 6px 6px;border-radius:14px;font-size:10.5px;font-weight:600;min-width:0;line-height:1.2}
 .pop button span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-align:center;max-width:100%}

@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.3.7';
+import { db } from './db.js?v=1.3.8';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.7';
-import { coverSVG, autoCover } from './covers.js?v=1.3.7';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.7';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.7';
-import { Player } from './player.js?v=1.3.7';
-import { translateMany } from './translate.js?v=1.3.7';
-import { track, summary } from './stats.js?v=1.3.7';
-import { renderCard, shareCard } from './quotes.js?v=1.3.7';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.7';
-import { SAMPLES } from './samples.js?v=1.3.7';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.8';
+import { coverSVG, autoCover } from './covers.js?v=1.3.8';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.8';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.8';
+import { Player } from './player.js?v=1.3.8';
+import { translateMany } from './translate.js?v=1.3.8';
+import { track, summary } from './stats.js?v=1.3.8';
+import { renderCard, shareCard } from './quotes.js?v=1.3.8';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.8';
+import { SAMPLES } from './samples.js?v=1.3.8';
 
-export const APP_VERSION = '1.3.7';
+export const APP_VERSION = '1.3.8';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -635,6 +635,50 @@ function fragBox(el, end) {
   const b = el.getBoundingClientRect();
   return (b.width || b.height) ? b : null;
 }
+/** width of the hyphenation hyphen in this element's font. */
+function hyphenW(el) {
+  const cs = getComputedStyle(el);
+  let ch = cs.hyphenateCharacter || cs.webkitHyphenateCharacter || '-';
+  ch = String(ch).replace(/["']/g, '') || '-';
+  if (ch === 'auto') ch = '-';
+  const canvas = hyphenW._c || (hyphenW._c = document.createElement('canvas'));
+  const ctx = canvas.getContext('2d');
+  const key = cs.font + '|' + ch;
+  if (hyphenW._k !== key) { ctx.font = cs.font; hyphenW._k = key; hyphenW._w = ctx.measureText(ch).width || parseFloat(cs.fontSize) * 0.33; }
+  return hyphenW._w;
+}
+/** if this line-fragment continues on the next line and the engine left the hyphen out of the box, include it. */
+function extendHyphenRect(el, r0) {
+  const cs = getComputedStyle(el);
+  const auto = (cs.hyphens === 'auto' || cs.webkitHyphens === 'auto') && cs.wordBreak !== 'break-all';
+  if (!auto) return r0;
+  const mid = r => (r.top + r.bottom) / 2;
+  const recs = [...el.getClientRects()].filter(r => r.width > 0.5 && r.height > 0.5);
+  const idx = recs.findIndex(r => Math.abs(mid(r) - mid(r0)) < 1 && Math.abs(r.left - r0.left) < 1);
+  const next = idx >= 0 ? recs[idx + 1] : null;
+  // only continued fragments (the next box is on a following line) need a hyphen
+  if (!next || Math.abs(mid(next) - mid(r0)) < r0.height * 0.55) return r0;
+  const tn = [...el.childNodes].find(n => n.nodeType === 3 && n.data.trim());
+  if (!tn) return r0;
+  const midY = mid(r0);
+  let last = 0;
+  for (let i = 1; i <= tn.length; i++) {
+    const rg = document.createRange(); rg.setStart(tn, i - 1); rg.setEnd(tn, i);
+    const r = rg.getBoundingClientRect();
+    if (r.height && Math.abs(mid(r) - midY) < r0.height * 0.55) last = i;
+    else if (last) break;
+  }
+  const prefix = tn.data.slice(0, last);
+  // a hard hyphen already lives in the source (and usually the box)
+  if (/[-‐‑‒–—−]$/.test(prefix)) return r0;
+  const rg = document.createRange(); rg.setStart(tn, 0); rg.setEnd(tn, last);
+  const ink = rg.getBoundingClientRect();
+  const hw = hyphenW(el);
+  if (ink.width && r0.width < ink.width + hw * 0.55) {
+    return { left: r0.left, top: r0.top, width: r0.width + hw, height: r0.height, right: r0.right + hw, bottom: r0.bottom };
+  }
+  return r0;
+}
 /** typographic metrics for a font/size: x-height, cap-height, baseline — not the word's own extenders. */
 function fontInk(cs) {
   const font = cs.font, fs = parseFloat(cs.fontSize) || 18;
@@ -700,9 +744,12 @@ function positionHL(instant) {
   if (!active) { hideHL(); return; }
   $$('#rdText .split').forEach(x => x !== el && x.classList.remove('split'));
   const { rects } = wordRect(el);
-  const bits = [...rects].filter(r => r.width > 0.5 && r.height > 0.5);
+  let bits = [...rects].filter(r => r.width > 0.5 && r.height > 0.5);
   if (!bits.length) return; // not laid out — the watchdog retries
   if (bits.length > 1) el.classList.add('split'); else el.classList.remove('split');
+  // CSS auto-hyphenation paints a hyphen at the end of every continued fragment;
+  // some engines omit that glyph from getClientRects — grow those fragments so the hyphen sits inside the pill.
+  if (bits.length > 1) bits = bits.map((r0, k) => k < bits.length - 1 ? extendHyphenRect(el, r0) : r0);
   const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
   const want = Math.max(4, Math.min(7, (parseFloat(getComputedStyle(el).fontSize) || 18) * 0.18));
   const sibs = el.parentElement ? [...el.parentElement.querySelectorAll('.w')] : [];
@@ -1220,6 +1267,53 @@ function positionHandles(drag) {
     else place(hb, box.right, box.bottom);
   }
 }
+/** union of every selected word fragment, plus the drop-handle radius, in client coordinates. */
+function selectionBox() {
+  const r = S.selRange; if (!r) return null;
+  let top = Infinity, bottom = -Infinity, left = Infinity, right = -Infinity;
+  for (let i = r.a; i <= r.b; i++) {
+    const el = S.wordEls[i]; if (!el) continue;
+    const recs = el.getClientRects();
+    for (const b of recs) {
+      if (b.width < 0.5 && b.height < 0.5) continue;
+      top = Math.min(top, b.top); bottom = Math.max(bottom, b.bottom);
+      left = Math.min(left, b.left); right = Math.max(right, b.right);
+    }
+  }
+  if (!Number.isFinite(top)) return null;
+  const hr = 11; // half of the 22px handle, which sits on the first/last corner
+  return { top: top - hr, bottom: bottom + hr, left, right, width: Math.max(1, right - left), midX: (left + right) / 2 };
+}
+function chromeTop() {
+  const bar = document.querySelector('#reader .rd-bar');
+  if (bar && !prefs.bare) {
+    const b = bar.getBoundingClientRect().bottom;
+    if (b > 0) return b + 6;
+  }
+  return envInset('top') + 8;
+}
+function chromeBottom() {
+  let bottom = innerHeight - envInset('bottom');
+  const dock = document.querySelector('#dock');
+  const player = document.querySelector('#player');
+  if (dock && !prefs.bare) bottom = Math.min(bottom, dock.getBoundingClientRect().top);
+  if (player && player.classList.contains('show') && !prefs.bare) bottom = Math.min(bottom, player.getBoundingClientRect().top);
+  return bottom;
+}
+/** iOS-style: above the first line with a gap; if that hits the header, below the last line. Never overlaps the selection or handles. */
+function placeMenu(box, ph, gap = 12) {
+  const top = chromeTop(), bottom = chromeBottom();
+  const above = box.top - gap - ph;
+  const below = box.bottom + gap;
+  const canAbove = above >= top;
+  const canBelow = below + ph <= bottom;
+  if (canAbove) return { y: above, below: false };
+  if (canBelow) return { y: below, below: true };
+  // almost no room: pick the side with more free space, still staying outside the selection
+  const spaceAbove = box.top - top, spaceBelow = bottom - box.bottom;
+  if (spaceAbove >= spaceBelow && spaceAbove > 8) return { y: Math.max(top, box.top - gap - ph), below: false };
+  return { y: Math.min(below, Math.max(top, bottom - ph)), below: true };
+}
 function hideMenu() { $('#pop')?.classList.remove('show'); }
 function showPop(anchor) {
   const r = S.selRange; if (!r) return;
@@ -1231,21 +1325,17 @@ function showPop(anchor) {
     <button data-a="share">${ICON.share}<span>${t('shareAction')}</span></button>
     <button data-a="copy">${ICON.copy}<span>${t('copyShort')}</span></button>
     <button data-a="tr">${ICON.tr}<span>${t('translateShort')}</span></button><i class="ptr"></i>`;
-  const startEl = S.wordEls[r.a], endEl = S.wordEls[r.b];
-  const box = (anchor && anchor.getBoundingClientRect) ? anchor.getBoundingClientRect()
-    : (startEl && endEl) ? (() => { const a = startEl.getBoundingClientRect(), b = endEl.getBoundingClientRect(); return { top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom), left: Math.min(a.left, b.left), width: Math.abs(Math.max(a.right, b.right) - Math.min(a.left, b.left)) }; })()
-    : { top: 80, bottom: 120, left: 20, width: 40 };
+  const box = selectionBox() || (anchor && anchor.getBoundingClientRect && anchor.getBoundingClientRect()) || { top: 80, bottom: 120, left: 20, width: 40 };
+  const margin = 12;
   pop.classList.remove('below');
-  pop.style.left = '0px'; pop.style.top = '0px'; pop.classList.add('show');
-  const margin = 12, vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight;
   pop.style.left = margin + 'px';
   pop.style.right = margin + 'px';
   pop.style.width = 'auto';
+  pop.classList.add('show');
   const pw = pop.offsetWidth, ph = pop.offsetHeight, x = margin;
-  let y = box.top - ph - 12;
-  if (y < 70) { y = box.bottom + 12; pop.classList.add('below'); }
-  y = Math.max(8, Math.min(y, vh - ph - 8));
-  pop.style.top = y + 'px';
+  const yPos = placeMenu(box, ph);
+  if (yPos.below) pop.classList.add('below');
+  pop.style.top = yPos.y + 'px';
   pop.querySelector('.ptr').style.left = Math.min(pw - 20, Math.max(8, box.left + box.width / 2 - x - 6)) + 'px';
   positionHandles();
   const text = rangeText(r.a, r.b);
@@ -2220,5 +2310,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox };
+window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect };
 boot();
