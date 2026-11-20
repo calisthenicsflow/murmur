@@ -1,21 +1,22 @@
-import { db } from './db.js?v=1.3.9';
-import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.9';
-import { coverSVG, autoCover } from './covers.js?v=1.3.9';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.9';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.9';
-import { Player } from './player.js?v=1.3.9';
-import { translateMany } from './translate.js?v=1.3.9';
-import { track, summary } from './stats.js?v=1.3.9';
-import { renderCard, shareCard } from './quotes.js?v=1.3.9';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.9';
-import { SAMPLES } from './samples.js?v=1.3.9';
+import { db } from './db.js?v=1.4.0';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.4.0';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.4.0';
+import { coverSVG, autoCover } from './covers.js?v=1.4.0';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.4.0';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.4.0';
+import { Player } from './player.js?v=1.4.0';
+import { translateMany } from './translate.js?v=1.4.0';
+import { track, summary } from './stats.js?v=1.4.0';
+import { renderCard, shareCard } from './quotes.js?v=1.4.0';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.4.0';
+import { SAMPLES } from './samples.js?v=1.4.0';
 
-export const APP_VERSION = '1.3.9';
+export const APP_VERSION = '1.4.0';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
   pages: '<svg viewBox="0 0 24 24"><path d="M4 5.5c2.5-1 5.2-1 8 .8 2.8-1.8 5.5-1.8 8-.8v13c-2.5-1-5.2-1-8 .8-2.8-1.8-5.5-1.8-8-.8z"/><path d="M12 6.3v13"/></svg>',
+  follow: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.2"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/><circle cx="12" cy="12" r="2.2"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',
   x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   check: '<svg viewBox="0 0 24 24" class="ck"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -47,9 +48,10 @@ const FS_STEPS = [14, 16, 18, 21, 24, 28, 32, 36], FS_MIN = 14, FS_MAX = 36;
 const TR_LANGS = ['ru', 'en', 'es', 'de', 'fr', 'it', 'uk', 'pt', 'tr', 'zh', 'ja'];
 
 /* ------------------------------ state ------------------------------ */
-const DEF = { align: 'justify', theme: 'paper', fs: 19, font: 'literata', lh: 1.62, dim: 0, engine: 'auto', voices: {}, rate: 1, skip: true, bi: false, biTo: '', both: false, readTr: true, bare: false, hints: {}, focus: false, relay: '' };
+const DEF = { align: 'justify', theme: 'paper', fs: 19, font: 'literata', lh: 1.62, dim: 0, engine: 'auto', voices: {}, rate: 1, skip: true, bi: false, biTo: '', both: false, readTr: true, bare: false, hints: {}, focus: false, relay: '', pages: false, followHl: true };
 const prefs = Object.assign({}, DEF, JSON.parse(localStorage.getItem('murmur:prefs') || '{}'));
 const savePrefs = () => localStorage.setItem('murmur:prefs', JSON.stringify(prefs));
+const followOn = () => prefs.followHl !== false;
 const S = { books: [], book: null, sec: 0, model: null, mode: 'read', wordEls: [], sentEls: [], curW: -1, curS: 0, neuralOk: false, relay: '', timer: null, trans: {}, lastUserScroll: 0, lastInteract: Date.now(), screen: 'library', stack: [] };
 const player = new Player();
 const device = createWebSpeechEngine();
@@ -467,7 +469,7 @@ function renderSection(startWord = 0, scroll = true) {
   art.insertAdjacentHTML('afterbegin', trOnly() ? `<div class="tr-banner"><span>${ICON.tr}${esc(t('readingIn').replace('{lang}', uiLang() === 'ru' ? langName(S.book.trTo, 'ru').toLowerCase() : langName(S.book.trTo, uiLang())))}</span><button id="trOrig">${t('showOriginal')}</button></div>` : '');
   if (trOnly()) $('#trOrig').onclick = e => { e.stopPropagation(); exitTrOnly(); };
   // translations arrive asynchronously and shift the layout; keep the floating highlight glued to its word
-  if (!art._ro && window.ResizeObserver) { let raf = 0; art._ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { if (prefs.pages) layoutPages(); positionHL(true); if (S.selRange) positionHandles(); }); }); art._ro.observe(art); }
+  if (!art._ro && window.ResizeObserver) { let raf = 0; art._ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const w = Math.round(art.clientWidth); if (S._artW !== w) { S._artW = w; if (prefs.pages) layoutPages(); } positionHL(true); if (S.selRange) positionHandles(); }); }); art._ro.observe(art); }
   updateNextBtn(); updateOCRPill(b);
   const sw = Math.min(startWord, S.model.words.length - 1);
   setCurrent(Math.max(0, sw), false);
@@ -828,53 +830,93 @@ function syncViewport() {
 }
 /** pages: one column per screen width (set as a CSS variable, so text size / bars / rotation re-paginate) */
 function layoutPages() {
-  if (!prefs.pages) return;
-  const sc = $('#rdScroll'); sc.scrollTop = 0;
-  const pw = pageW();
-  const pwChanged = S.lastPw !== pw; S.lastPw = pw;
-  const top = rdTopPx();
-  const bottom = 24 + envInset('bottom');
-  const h = Math.max(80, Math.round(sc.clientHeight - top - bottom));
-  sc.style.setProperty('--rd-top', top + 'px');
-  // the column height is constant: dock / player overlay the page (with .rd-fade) so showing
-  // or hiding the controls never shifts the text
-  sc.style.setProperty('--pg-b', bottom + 'px');
-  sc.style.setProperty('--pg-h', h + 'px');
-  sc.style.setProperty('--pw', pw + 'px');
-  const el = S.wordEls[S.curW]; if (el && (pwChanged || player.playing || player.paused) && !(S.pgAt && Date.now() - S.pgAt < 450)) { const p = pageOfEl(el); if (p !== pageInfo().i) pageTo(p, false); }
-  updateProgress();
+  if (!prefs.pages || S._inLayout) return;
+  S._inLayout = true;
+  try {
+    const sc = $('#rdScroll');
+    if (sc.scrollTop) sc.scrollTop = 0;
+    const pw = pageW();
+    const top = rdTopPx();
+    const bottom = 24 + envInset('bottom');
+    const h = Math.max(80, Math.round(sc.clientHeight - top - bottom));
+    const key = pw + '|' + top + '|' + bottom + '|' + h;
+    if (S._pgKey === key) return; // nothing changed — touching column CSS here makes WebKit flash the page
+    S._pgKey = key;
+    S.lastPw = pw;
+    S._layoutN = (S._layoutN || 0) + 1;
+    sc.style.setProperty('--rd-top', top + 'px');
+    // the column height is constant: dock / player overlay the page (with .rd-fade) so showing
+    // or hiding the controls never shifts the text
+    sc.style.setProperty('--pg-b', bottom + 'px');
+    sc.style.setProperty('--pg-h', h + 'px');
+    sc.style.setProperty('--pw', pw + 'px');
+    updateProgress();
+  } finally { S._inLayout = false; }
 }
+/** vertical centre of the visible reading area (below the header, above the player or dock). */
+function readingCenterY() {
+  const sc = $('#rdScroll'); if (!sc) return innerHeight / 2;
+  const sr = sc.getBoundingClientRect();
+  const bar = document.querySelector('#reader .rd-bar');
+  const top = (!prefs.bare && bar) ? Math.max(sr.top, bar.getBoundingClientRect().bottom) : sr.top;
+  const player = $('#player'), dock = $('#dock');
+  let bottom = sr.bottom;
+  if (player && player.classList.contains('show') && !prefs.bare) bottom = Math.min(bottom, player.getBoundingClientRect().top);
+  else if (dock && !prefs.bare) bottom = Math.min(bottom, dock.getBoundingClientRect().top);
+  return (top + bottom) / 2;
+}
+function wordMidY(el) { const r = el.getBoundingClientRect(); return (r.top + r.bottom) / 2; }
 function scrollEl(el, smooth = true) {
   if (prefs.pages) return pageTo(pageOfEl(el), smooth);
-  const sc = $('#rdScroll'); const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - sc.clientHeight * 0.33;
+  const sc = $('#rdScroll');
+  const top = sc.scrollTop + (wordMidY(el) - readingCenterY());
   // far jumps go straight there: a long smooth glide would run through chapters that are being added/removed under it
   if (smooth && Math.abs(top - sc.scrollTop) > sc.clientHeight * 1.5) smooth = false;
   S.progScroll = Date.now(); sc.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
-  if (!smooth) { ensureWindow(); requestAnimationFrame(() => { const t2 = el.isConnected ? el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - sc.clientHeight * 0.33 : null; if (t2 != null && Math.abs(t2 - sc.scrollTop) > 2) { S.progScroll = Date.now(); sc.scrollTop = Math.max(0, t2); } positionHL(true); }); }
+  if (!smooth) { ensureWindow(); requestAnimationFrame(() => { if (!el.isConnected) return; const t2 = sc.scrollTop + (wordMidY(el) - readingCenterY()); if (Math.abs(t2 - sc.scrollTop) > 2) { S.progScroll = Date.now(); sc.scrollTop = Math.max(0, t2); } positionHL(true); }); }
+}
+function autoScroll(w) {
+  if (prefs.focus || !followOn()) return;
+  const el = S.wordEls[w]; if (!el) return;
+  if (prefs.pages) {
+    const p = pageOfEl(el);
+    if (p === pageInfo().i) return; // page stays still until the highlight leaves it
+    if (S.touching || Date.now() - S.lastUserScroll < 4000) { $('#recenter').classList.add('show'); return; }
+    return pageTo(p, true); // highlight reached the next page: turn smoothly
+  }
+  followEl(el);
+}
+/** keep the spoken word smoothly centred in the visible reading area. Never under a finger. */
+function followEl(el) {
+  if (!followOn() || prefs.pages) return;
+  if (S.touching || Date.now() - S.lastUserScroll < 4000) { $('#recenter').classList.add('show'); return; }
+  const delta = wordMidY(el) - readingCenterY();
+  if (Math.abs(delta) < 4) return;
+  // a long jump (starting mid-book) snaps/glides once; small step-to-step moves are eased by the tick
+  if (Math.abs(delta) > 64) scrollEl(el, Math.abs(delta) < ($('#rdScroll').clientHeight * 1.5));
+  startFollowTick();
+}
+function startFollowTick() {
+  if (S._followRaf) return;
+  const step = () => {
+    S._followRaf = 0;
+    if (!followOn() || prefs.pages || prefs.focus || S.mode !== 'listen') return;
+    if (S.touching || Date.now() - S.lastUserScroll < 4000) { $('#recenter').classList.add('show'); return; }
+    const el = S.wordEls[S.curW]; if (!el?.isConnected) return;
+    const sc = $('#rdScroll');
+    const delta = wordMidY(el) - readingCenterY();
+    if (Math.abs(delta) < 1) return;
+    const move = Math.abs(delta) < 8 ? delta : delta * 0.22;
+    S.progScroll = Date.now();
+    sc.scrollTop = Math.max(0, sc.scrollTop + move);
+    positionHL(true);
+    S._followRaf = requestAnimationFrame(step);
+  };
+  S._followRaf = requestAnimationFrame(step);
 }
 function scrollToWord(w, smooth = true) {
   const el = S.wordEls[w]; if (!el) return;
   scrollEl(el, smooth);
-}
-function autoScroll(w) {
-  if (prefs.focus) return;
-  const el = S.wordEls[w], sc = $('#rdScroll'); if (!el) return;
-  if (prefs.pages) {
-    const p = pageOfEl(el);
-    if (p === pageInfo().i) return;
-    if (Date.now() - S.lastUserScroll < 4000) { $('#recenter').classList.add('show'); return; }
-    return pageTo(p); // the highlight reached the next page: turn it
-  }
-  followEl(el);
-}
-/** auto-follow: the page stays still while the spoken line is in the comfortable zone; only when it reaches the
-    bottom quarter (or leaves the screen) one smooth scroll brings it to the upper third. Never under a finger. */
-function followEl(el) {
-  const sc = $('#rdScroll');
-  if (S.touching || Date.now() - S.lastUserScroll < 4000) { $('#recenter').classList.add('show'); return; }
-  const y = el.getBoundingClientRect().top - sc.getBoundingClientRect().top;
-  const H = sc.clientHeight, lh = el.getBoundingClientRect().height || 24;
-  if (y < 0 || y + lh > H * 0.75) { if (S.autoScrolling && Date.now() - S.autoScrolling < 700) return; S.autoScrolling = Date.now(); S.autoScrolls = (S.autoScrolls || 0) + 1; scrollEl(el); }
 }
 $('#recenter').onclick = () => { S.lastUserScroll = 0; $('#recenter').classList.remove('show'); scrollToWord(S.curW); };
 ['touchstart', 'wheel'].forEach(ev => $('#rdScroll').addEventListener(ev, () => { S.lastUserScroll = Date.now(); S.lastInteract = Date.now(); }, { passive: true }));
@@ -1444,6 +1486,41 @@ function hidePop() {
 document.addEventListener('click', e => { if (!e.target.closest('#pop') && !e.target.closest('#rdText') && !e.target.closest('.sel-handle')) hidePop(); });
 document.addEventListener('selectstart', e => { if (e.target.closest?.('#rdText, #rdScroll, .sel-handle')) e.preventDefault(); });
 
+/** current text line-height in CSS pixels (one line = the iOS finger-to-selection offset). */
+function lineH(el) {
+  const node = el || S.wordEls[S.curW] || document.querySelector('#rdText .w') || $('#rdText') || document.body;
+  const cs = getComputedStyle(node);
+  if (cs.lineHeight && cs.lineHeight.endsWith('px')) {
+    const px = parseFloat(cs.lineHeight);
+    if (px > 0) return px;
+  }
+  const fs = parseFloat(cs.fontSize) || prefs.fs || 19;
+  const unit = parseFloat(cs.lineHeight);
+  if (Number.isFinite(unit) && unit > 0 && cs.lineHeight !== 'normal') return unit * fs;
+  const varLh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--lh'));
+  return fs * (varLh || prefs.lh || 1.62);
+}
+/** nearest word on the line through (x, y) — survives justified gaps where caretRangeFromPoint misses. */
+function wordOnLine(x, y) {
+  const hit = caretFromPoint(x, y);
+  const lh = lineH();
+  if (hit.word >= 0) {
+    const el = S.wordEls[hit.word];
+    const r = el && (hit.box && hit.box.height ? hit.box : el.getBoundingClientRect());
+    if (r && Math.abs((r.top + r.bottom) / 2 - y) <= lh * 0.65) return hit;
+  }
+  let best = -1, bestD = Infinity, bestBox = null;
+  for (let i = 0; i < (S.wordEls || []).length; i++) {
+    const el = S.wordEls[i]; if (!el) continue;
+    for (const r of el.getClientRects()) {
+      if (r.width < 0.5 || r.height < 0.5) continue;
+      if (Math.abs((r.top + r.bottom) / 2 - y) > lh * 0.55) continue;
+      const dx = x < r.left ? r.left - x : (x > r.right ? x - r.right : 0);
+      if (dx < bestD) { bestD = dx; best = i; bestBox = r; }
+    }
+  }
+  return { word: best, box: bestBox, el: best >= 0 ? S.wordEls[best] : null };
+}
 // iOS-style selection: long-press or double-tap-and-hold, then drag word-by-word with the finger.
 // The action menu appears only after the finger is released. Handles follow the caret under the finger.
 (() => {
@@ -1454,6 +1531,13 @@ document.addEventListener('selectstart', e => { if (e.target.closest?.('#rdText,
 
   const clear = () => { if (timer) { clearTimeout(timer); timer = 0; } if (holdT) { clearTimeout(holdT); holdT = 0; } };
   const hitXY = (e) => ({ x: e.clientX - grabDX, y: e.clientY - grabDY });
+  const selFromFinger = (x, y) => {
+    const lh = lineH();
+    const above = wordOnLine(x, y - lh);
+    if (above.word >= 0) return { x, y: y - lh, hit: above };
+    // first line / autoscroll top: nothing lives above, so use the word under the finger
+    return { x, y, hit: wordOnLine(x, y) };
+  };
   const arm = (w) => {
     if (w < 0) return;
     armed = true; setSelecting(true); S.suppressTap = Date.now(); hideMenu();
@@ -1472,12 +1556,13 @@ document.addEventListener('selectstart', e => { if (e.target.closest?.('#rdText,
     if (lastY < r.top + edge) dy = -Math.max(4, Math.min(28, (r.top + edge - lastY) * 0.45));
     else if (lastY > r.bottom - edge) dy = Math.max(4, Math.min(28, (lastY - (r.bottom - edge)) * 0.45));
     if (dy) { S.progScroll = Date.now(); sc.scrollTop += dy; }
-    extendTo(lastX, lastY);
+    const p = selFromFinger(lastX, lastY);
+    extendTo(p.x, p.y, p.hit);
     autoRaf = requestAnimationFrame(autoScroll);
   };
   const startAuto = () => { if (!autoRaf) autoRaf = requestAnimationFrame(autoScroll); };
-  const extendTo = (x, y) => {
-    const hit = caretFromPoint(x, y);
+  const extendTo = (x, y, hit0) => {
+    const hit = hit0 || caretFromPoint(x, y);
     const w = hit.word >= 0 ? hit.word : lastWord;
     if (w < 0) return lastWord;
     lastWord = w;
@@ -1511,8 +1596,8 @@ document.addEventListener('selectstart', e => { if (e.target.closest?.('#rdText,
     if (mode === 'double' && !armed && Math.hypot(dx, dy) > 6) arm(anchor);
     if (!armed && !S.selDragging) return;
     S.suppressTap = Date.now();
-    const p = hitXY(e);
-    extendTo(p.x, p.y);
+    const p = selFromFinger(e.clientX, e.clientY);
+    extendTo(p.x, p.y, p.hit);
     startAuto();
   };
   const onUp = e => {
@@ -1578,6 +1663,9 @@ document.addEventListener('selectstart', e => { if (e.target.closest?.('#rdText,
       lastX = e.clientX; lastY = e.clientY;
       startAuto();
     });
+    // pointer capture retargets moves to the handle; listen here so the one-line offset still applies
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
   };
   wire($('#selA'), 'a'); wire($('#selB'), 'b');
 })();
@@ -1994,6 +2082,7 @@ $('#rdMore').onclick = () => {
     <div class="row" style="cursor:default"><div class="tx" style="padding-left:48px"><b style="font-weight:500;font-size:14px;color:var(--ink2)">${t('translateTo')}</b></div><select id="biTo" class="row-select" aria-label="${t('translateTo')}">${langs}</select></div>
     <div class="row" data-tg="both"><div class="ic">${ICON.headph}</div><div class="tx"><b>${t('readTr')}</b><small>${t('readTrHint')}</small></div><i class="sw ${prefs.readTr ? 'on' : ''}"></i></div>
     <div class="row" data-tg="pages"><div class="ic">${ICON.pages}</div><div class="tx"><b>${t('pagesMode')}</b><small>${t('pagesHint')}</small></div><i class="sw ${prefs.pages ? 'on' : ''}"></i></div>
+    <div class="row" data-tg="followHl"><div class="ic">${ICON.follow}</div><div class="tx"><b>${t('followHl')}</b><small>${t('followHlHint')}</small></div><i class="sw ${followOn() ? 'on' : ''}"></i></div>
     <div class="row" data-tg="skip"><div class="ic">${ICON.wand}</div><div class="tx"><b>${t('skipFiller')}</b><small>${t('skipFillerHint')}</small></div><i class="sw ${prefs.skip ? 'on' : ''}"></i></div>
 `, body => {
     body.querySelectorAll('[data-tg]').forEach(r => r.onclick = () => {
@@ -2002,6 +2091,7 @@ $('#rdMore').onclick = () => {
       if (k === 'bi') { setBilingual(!prefs.bi); sw.classList.toggle('on', prefs.bi); }
       if (k === 'both') { prefs.readTr = !prefs.readTr; savePrefs(); sw.classList.toggle('on', prefs.readTr); if (prefs.readTr && !prefs.bi) { setBilingual(true); body.querySelector('[data-tg=bi] .sw').classList.add('on'); } else { const wp = player.playing; setupBilingualVoice().then(() => { if (wp && player.playing) player.play(S.curW); }); } }
       if (k === 'pages') { setPages(!prefs.pages); sw.classList.toggle('on', prefs.pages); }
+      if (k === 'followHl') { prefs.followHl = !followOn(); savePrefs(); sw.classList.toggle('on', followOn()); }
       if (k === 'skip') { prefs.skip = !prefs.skip; savePrefs(); sw.classList.toggle('on', prefs.skip); const w = S.curW; player.stop(); renderSection(w); }
     });
     body.querySelector('#biTo').onchange = async e => { const wp = player.playing, w = S.curW; prefs.biTo = e.target.value; savePrefs(); renderSection(w, false); if (prefs.bi) ensureTranslations(); await S.voiceReady; if (wp) startPlayback(Math.max(0, S.curW)); };
@@ -2389,5 +2479,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands };
+window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
 boot();

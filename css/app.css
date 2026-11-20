@@ -518,7 +518,11 @@ textarea{min-height:170px;resize:none;font-family:var(--serif);line-height:1.5}
    so a chapter page would show the heading and drop cap with the rest of the
    paragraph gone (it only appeared after a swipe). Words don't need a
    containing block here: the highlight lives in #hls, under the flow. */
-#reader.pages .rd-text .w{position:static;z-index:auto}
+#reader.pages .rd-text .w,
+#reader.pages .rd-text .w.cw,
+#reader.pages .rd-text .w.split,
+#reader.pages .rd-text .w.cw.split{position:static;z-index:auto;transition:none}
+#reader.pages .rd-text .s{transition:none}
 #reader.pages .rd-head{break-after:avoid;margin-top:0}
 #reader.pages .rd-next{margin-top:18px;break-inside:avoid}
 /* a chapter that starts a new column must not carry its previous-page top margin, or the page sinks */
