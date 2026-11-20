@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.3.3';
+import { db } from './db.js?v=1.3.4';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.3';
-import { coverSVG, autoCover } from './covers.js?v=1.3.3';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.3.3';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.3';
-import { Player } from './player.js?v=1.3.3';
-import { translateMany } from './translate.js?v=1.3.3';
-import { track, summary } from './stats.js?v=1.3.3';
-import { renderCard, shareCard } from './quotes.js?v=1.3.3';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.3';
-import { SAMPLES } from './samples.js?v=1.3.3';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.4';
+import { coverSVG, autoCover } from './covers.js?v=1.3.4';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.3.4';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.4';
+import { Player } from './player.js?v=1.3.4';
+import { translateMany } from './translate.js?v=1.3.4';
+import { track, summary } from './stats.js?v=1.3.4';
+import { renderCard, shareCard } from './quotes.js?v=1.3.4';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.4';
+import { SAMPLES } from './samples.js?v=1.3.4';
 
-export const APP_VERSION = '1.3.3';
+export const APP_VERSION = '1.3.4';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -295,6 +295,7 @@ function openSheet(html, mount, onClose) {
   requestAnimationFrame(() => { sh.classList.add('show'); $('#scrim').classList.add('show'); });
   mount && mount(body);
   hidePop();
+  hideHint();
 }
 function closeSheet() { $('#sheet').classList.remove('show'); $('#scrim').classList.remove('show'); const f = sheetClose; sheetClose = null; f && f(); }
 $('#scrim').onclick = () => closeSheet();
@@ -320,7 +321,7 @@ async function openBook(id, autoplay = false) {
   renderSection(b.pos?.w || 0); renderTimer();
   // resuming somewhere inside the book: say where, briefly
   if ((b.pos?.sec || 0) > 0 || (b.pos?.w || 0) > 0) { const sn = S.model.sents[Math.max(0, S.curS)]?.text || ''; setTimeout(() => toast(t('continueFrom').replace('{x}', `«${sn.split(/\s+/).slice(0, 6).join(' ')}…» · ${fmtPct(bookProg().f)}`), 2600), 350); }
-  setTimeout(() => { if (S.screen === 'reader' && !prefs.bare) hint('tapHide', t('hintTapHide')); }, 1200);
+  setTimeout(() => { if (S.screen === 'reader' && !prefs.bare && !uiBusy()) hint('tapHide', t('hintTapHide')); }, 1200);
   if (autoplay) { unlockAudio(); startPlayback(S.curW >= 0 ? S.curW : 0); }
 }
 function leaveReader() { player.stop(); savePos(); hidePop(); $('#focus').classList.remove('show'); updateMediaSession(); }
@@ -662,9 +663,19 @@ function positionHL(instant) {
   el.classList.remove('split');
   if (!r0.width && !r0.height) return; // not laid out (hidden / detached) — the watchdog retries
   const r = el.classList.contains('dcw') ? r0 : glyphBox(el, r0);
+  // equal horizontal pad, shrunk if needed so the box never overlaps the neighbouring word
+  const want = Math.max(2, Math.min(3, (parseFloat(getComputedStyle(el).fontSize) || 18) * 0.12));
+  const sibs = el.parentElement ? [...el.parentElement.querySelectorAll('.w')] : [];
+  const i = sibs.indexOf(el), mid = box => (box.top + box.bottom) / 2;
+  const sameLine = (a, b) => a && Math.abs(mid(a) - mid(b)) < Math.min(a.height, b.height) * 0.55;
+  const prevB = i > 0 ? sibs[i - 1].getBoundingClientRect() : null;
+  const nextB = i < sibs.length - 1 ? sibs[i + 1].getBoundingClientRect() : null;
+  const leftGap = sameLine(prevB, r0) ? r0.left - prevB.right : 24;
+  const rightGap = sameLine(nextB, r0) ? nextB.left - r0.right : 24;
+  const padX = Math.max(0.75, Math.min(want, leftGap / 2 - 0.5, rightGap / 2 - 0.5));
   // the box lives in the scroller (not in the text), so it works the same for the vertical flow and for pages
   const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
-  const x = r.left - sr.left + sc.scrollLeft - 3, y = r.top - sr.top + sc.scrollTop, w = r.width + 6, h = r.height;
+  const x = r.left - sr.left + sc.scrollLeft - padX, y = r.top - sr.top + sc.scrollTop, w = r.width + padX * 2, h = r.height;
   if (hlLast && hlLast.el === el && Math.abs(hlLast.x - x) < .5 && Math.abs(hlLast.y - y) < .5 && Math.abs(hlLast.w - w) < .5 && Math.abs(hlLast.h - h) < .5 && hl.classList.contains('on')) return;
   // gliding is only for the next word on the same line; moving to another line (or out of a
   // hidden state, or after a reflow of the same word) jumps, so the box never travels diagonally
@@ -890,8 +901,21 @@ $('#rdScroll').addEventListener('click', e => {
   setBare(!prefs.bare);
 });
 /* one-time hints */
+function hideHint() {
+  const c = $('#coach'); if (c) c.classList.remove('show');
+  clearTimeout(S.coachT);
+  const toastEl = $('#toast'); if (toastEl) toastEl.classList.remove('show');
+  clearTimeout(toastT);
+}
+const uiBusy = () => !!(
+  $('#sheet')?.classList.contains('show') ||
+  $('#pop')?.classList.contains('show') ||
+  $('#ask')?.classList.contains('show') ||
+  S.selRange || S.selecting
+);
 function hint(k, msg) {
   prefs.hints = prefs.hints || {}; if (prefs.hints[k]) return false;
+  if (uiBusy()) return false; // don't consume the hint if a sheet/popup is in the way
   prefs.hints[k] = 1; savePrefs();
   if (msg) { const c = $('#coach'); c.innerHTML = msg; c.classList.add('show'); clearTimeout(S.coachT); S.coachT = setTimeout(() => c.classList.remove('show'), 5200); c.onclick = () => c.classList.remove('show'); }
   return true;
@@ -947,18 +971,24 @@ function showPop(s, anchor, endS = s) {
   const a = Math.min(s, endS), b = Math.max(s, endS);
   applySel(a, b);
   const pop = $('#pop');
+  hideHint();
   pop.innerHTML = `<div class="trbox" id="popTr"></div>
-    <button data-a="listen">${ICON.headph}<span>${t('listenFrom')}</span></button>
-    <button data-a="quote">${ICON.quote}<span>${t('saveQuote')}</span></button>
+    <button data-a="listen">${ICON.headph}<span>${t('listenFromShort')}</span></button>
+    <button data-a="quote">${ICON.quote}<span>${t('saveQuoteShort')}</span></button>
     <button data-a="share">${ICON.share}<span>${t('shareAction')}</span></button>
-    <button data-a="copy">${ICON.copy}<span>${t('copy')}</span></button>
-    <button data-a="tr">${ICON.tr}<span>${t('translate')}</span></button><i class="ptr"></i>`;
+    <button data-a="copy">${ICON.copy}<span>${t('copyShort')}</span></button>
+    <button data-a="tr">${ICON.tr}<span>${t('translateShort')}</span></button><i class="ptr"></i>`;
   const r = (anchor || S.sentEls[a]).getBoundingClientRect(); pop.classList.remove('below');
   pop.style.left = '0px'; pop.style.top = '0px'; pop.classList.add('show');
-  const pw = pop.offsetWidth, ph = pop.offsetHeight, vw = innerWidth;
-  let x = Math.min(vw - pw - 10, Math.max(10, r.left + r.width / 2 - pw / 2)), y = r.top - ph - 12;
+  const margin = 12, vw = document.documentElement.clientWidth || innerWidth, vh = innerHeight;
+  pop.style.left = margin + 'px';
+  pop.style.right = margin + 'px';
+  pop.style.width = 'auto';
+  const pw = pop.offsetWidth, ph = pop.offsetHeight, x = margin;
+  let y = r.top - ph - 12;
   if (y < 70) { y = r.bottom + 12; pop.classList.add('below'); }
-  pop.style.left = x + 'px'; pop.style.top = y + 'px';
+  y = Math.max(8, Math.min(y, vh - ph - 8));
+  pop.style.top = y + 'px';
   pop.querySelector('.ptr').style.left = Math.min(pw - 20, Math.max(8, r.left + r.width / 2 - x - 6)) + 'px';
   positionHandles();
   const text = rangeText(a, b);
@@ -1386,7 +1416,7 @@ $('#rdMore').onclick = () => {
   openSheet(`<div class="sh-title">${t('settings')}<button class="x" data-close>${ICON.x}</button></div>
     <div class="row" data-tg="focus"><div class="ic">${ICON.focus}</div><div class="tx"><b>${t('focus')}</b></div><i class="sw ${prefs.focus ? 'on' : ''}"></i></div>
     <div class="row" data-tg="bi"><div class="ic">${ICON.tr}</div><div class="tx"><b>${t('bilingual')}</b></div><i class="sw ${prefs.bi ? 'on' : ''}"></i></div>
-    <div class="row" style="cursor:default"><div class="tx" style="padding-left:48px"><b style="font-weight:500;font-size:14px;color:var(--ink2)">${t('translateTo')}</b></div><select id="biTo" style="width:auto;min-width:140px;padding:9px 12px;font-size:15px">${langs}</select></div>
+    <div class="row" style="cursor:default"><div class="tx" style="padding-left:48px"><b style="font-weight:500;font-size:14px;color:var(--ink2)">${t('translateTo')}</b></div><select id="biTo" class="row-select" aria-label="${t('translateTo')}">${langs}</select></div>
     <div class="row" data-tg="both"><div class="ic">${ICON.headph}</div><div class="tx"><b>${t('readTr')}</b><small>${t('readTrHint')}</small></div><i class="sw ${prefs.readTr ? 'on' : ''}"></i></div>
     <div class="row" data-tg="pages"><div class="ic">${ICON.pages}</div><div class="tx"><b>${t('pagesMode')}</b><small>${t('pagesHint')}</small></div><i class="sw ${prefs.pages ? 'on' : ''}"></i></div>
     <div class="row" data-tg="skip"><div class="ic">${ICON.wand}</div><div class="tx"><b>${t('skipFiller')}</b><small>${t('skipFillerHint')}</small></div><i class="sw ${prefs.skip ? 'on' : ''}"></i></div>
@@ -1743,5 +1773,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, positionHL, showPop, hidePop, updateMediaSession, mediaArtwork, layoutPages, glyphBox, shareSelection, buildModel };
+window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, shareSelection, buildModel };
 boot();
