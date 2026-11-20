@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.3.8';
+import { db } from './db.js?v=1.3.9';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.8';
-import { coverSVG, autoCover } from './covers.js?v=1.3.8';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.8';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.8';
-import { Player } from './player.js?v=1.3.8';
-import { translateMany } from './translate.js?v=1.3.8';
-import { track, summary } from './stats.js?v=1.3.8';
-import { renderCard, shareCard } from './quotes.js?v=1.3.8';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.8';
-import { SAMPLES } from './samples.js?v=1.3.8';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.9';
+import { coverSVG, autoCover } from './covers.js?v=1.3.9';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.9';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.9';
+import { Player } from './player.js?v=1.3.9';
+import { translateMany } from './translate.js?v=1.3.9';
+import { track, summary } from './stats.js?v=1.3.9';
+import { renderCard, shareCard } from './quotes.js?v=1.3.9';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.9';
+import { SAMPLES } from './samples.js?v=1.3.9';
 
-export const APP_VERSION = '1.3.8';
+export const APP_VERSION = '1.3.9';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -467,7 +467,7 @@ function renderSection(startWord = 0, scroll = true) {
   art.insertAdjacentHTML('afterbegin', trOnly() ? `<div class="tr-banner"><span>${ICON.tr}${esc(t('readingIn').replace('{lang}', uiLang() === 'ru' ? langName(S.book.trTo, 'ru').toLowerCase() : langName(S.book.trTo, uiLang())))}</span><button id="trOrig">${t('showOriginal')}</button></div>` : '');
   if (trOnly()) $('#trOrig').onclick = e => { e.stopPropagation(); exitTrOnly(); };
   // translations arrive asynchronously and shift the layout; keep the floating highlight glued to its word
-  if (!art._ro && window.ResizeObserver) { let raf = 0; art._ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { if (prefs.pages) layoutPages(); positionHL(true); }); }); art._ro.observe(art); }
+  if (!art._ro && window.ResizeObserver) { let raf = 0; art._ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { if (prefs.pages) layoutPages(); positionHL(true); if (S.selRange) positionHandles(); }); }); art._ro.observe(art); }
   updateNextBtn(); updateOCRPill(b);
   const sw = Math.min(startWord, S.model.words.length - 1);
   setCurrent(Math.max(0, sw), false);
@@ -1019,8 +1019,8 @@ if (window.visualViewport) {
   visualViewport.addEventListener('scroll', () => { syncViewport(); positionHL(true); positionHandles(); });
 }
 $('#app').addEventListener('scroll', () => { $('#app').scrollLeft = 0; $('#app').scrollTop = 0; });
-document.fonts && document.fonts.ready.then(() => positionHL(true));
-document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => requestAnimationFrame(() => positionHL(true)));
+document.fonts && document.fonts.ready.then(() => { positionHL(true); if (S.selRange) positionHandles(); });
+document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => requestAnimationFrame(() => { positionHL(true); if (S.selRange) positionHandles(); }));
 
 function updateProgress() {
   if (!S.model) return;
@@ -1176,6 +1176,88 @@ function applySel(a, b) {
   S.wordEls[b]?.classList.add('sel-b');
   positionHandles();
 }
+function selHost() {
+  let host = $('#sels');
+  if (!host) {
+    host = document.createElement('div'); host.id = 'sels'; host.className = 'sels';
+    const sc = $('#rdScroll'); if (!sc) return null;
+    const hls = $('#hls');
+    if (hls) hls.after(host); else sc.insertBefore(host, sc.firstChild);
+  }
+  return host;
+}
+function hideSel() { const host = $('#sels'); if (host) host.replaceChildren(); }
+/** column index in pages mode so two pages that share a Y are never merged into one band. */
+function selColOf(x, sc, sr) {
+  if (!$('#reader')?.classList.contains('pages')) return 0;
+  const pw = parseFloat(getComputedStyle(sc).getPropertyValue('--pw')) || sr.width;
+  return Math.floor((x - sr.left + sc.scrollLeft) / Math.max(1, pw));
+}
+/** iOS-style selection: one continuous client-rect band per line. */
+function selLineBands() {
+  const r = S.selRange; if (!r) return [];
+  const frags = [];
+  for (let i = r.a; i <= r.b; i++) {
+    const el = S.wordEls[i]; if (!el?.isConnected) continue;
+    for (const b of el.getClientRects()) {
+      if (b.width > 0.5 && b.height > 0.5) frags.push(b);
+    }
+  }
+  if (!frags.length) return [];
+  const mid = b => (b.top + b.bottom) / 2;
+  const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
+  frags.sort((a, b) => selColOf(a.left, sc, sr) - selColOf(b.left, sc, sr) || a.top - b.top || a.left - b.left);
+  const lines = [];
+  for (const f of frags) {
+    const c = selColOf(f.left, sc, sr);
+    const last = lines[lines.length - 1];
+    if (last && last.col === c && Math.abs(mid(f) - last.mid) < Math.min(f.height, last.h) * 0.55) {
+      last.left = Math.min(last.left, f.left);
+      last.right = Math.max(last.right, f.right);
+      last.hs.push(f.height);
+      last.mids.push(mid(f));
+      const sm = last.mids.slice().sort((a, b) => a - b);
+      const sh = last.hs.slice().sort((a, b) => a - b);
+      last.mid = sm[Math.floor(sm.length / 2)];
+      last.h = sh[Math.floor(sh.length / 2)];
+    } else {
+      lines.push({ col: c, left: f.left, right: f.right, mid: mid(f), h: f.height, mids: [mid(f)], hs: [f.height] });
+    }
+  }
+  const hs = lines.map(l => l.h).sort((a, b) => a - b);
+  const med = hs[Math.floor(hs.length / 2)];
+  for (const l of lines) {
+    const H = l.h > med * 1.35 ? l.h : med;
+    l.h = H; l.top = l.mid - H / 2; l.bottom = l.mid + H / 2;
+  }
+  for (let i = 0; i < lines.length - 1; i++) {
+    const a = lines[i], b = lines[i + 1];
+    if (a.col !== b.col) continue;
+    if (b.top < a.bottom + 0.5) {
+      const split = (a.bottom + b.top) / 2;
+      a.bottom = split - 0.25; b.top = split + 0.25;
+      a.h = a.bottom - a.top; b.h = b.bottom - b.top;
+    }
+  }
+  return lines.map(l => ({ left: l.left, right: l.right, top: l.top, bottom: l.bottom, width: Math.max(1, l.right - l.left), height: Math.max(1, l.bottom - l.top), col: l.col }));
+}
+function paintSel() {
+  const host = selHost(); if (!host) return;
+  if (!S.selRange) { host.replaceChildren(); return; }
+  const bands = selLineBands();
+  const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
+  while (host.children.length < bands.length) {
+    const d = document.createElement('div'); d.className = 'sel-band'; host.appendChild(d);
+  }
+  [...host.children].forEach((el, i) => {
+    if (i >= bands.length) { el.style.display = 'none'; return; }
+    const b = bands[i];
+    el.style.display = 'block';
+    el.style.transform = `translate(${(b.left - sr.left + sc.scrollLeft).toFixed(2)}px, ${(b.top - sr.top + sc.scrollTop).toFixed(2)}px)`;
+    el.style.width = b.width.toFixed(2) + 'px';
+    el.style.height = b.height.toFixed(2) + 'px';
+  });
+}
 function scrollerXY(clientX, clientY) {
   const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
   return { x: clientX - sr.left + sc.scrollLeft, y: clientY - sr.top + sc.scrollTop };
@@ -1246,7 +1328,7 @@ function setSelecting(on) {
 function positionHandles(drag) {
   const ha = $('#selA'), hb = $('#selB'), r = S.selRange;
   if (!ha || !hb) return;
-  if (!r) { ha.classList.remove('on'); hb.classList.remove('on'); ha.hidden = true; hb.hidden = true; return; }
+  if (!r) { ha.classList.remove('on'); hb.classList.remove('on'); ha.hidden = true; hb.hidden = true; hideSel(); return; }
   const size = 22;
   const place = (el, clientX, clientY) => {
     const p = scrollerXY(clientX, clientY);
@@ -1266,19 +1348,15 @@ function positionHandles(drag) {
     if (!box || !(box.width + box.height)) { hb.classList.remove('on'); hb.hidden = true; }
     else place(hb, box.right, box.bottom);
   }
+  paintSel();
 }
-/** union of every selected word fragment, plus the drop-handle radius, in client coordinates. */
+/** union of the selection bands, plus the drop-handle radius, in client coordinates. */
 function selectionBox() {
-  const r = S.selRange; if (!r) return null;
+  const bands = selLineBands();
   let top = Infinity, bottom = -Infinity, left = Infinity, right = -Infinity;
-  for (let i = r.a; i <= r.b; i++) {
-    const el = S.wordEls[i]; if (!el) continue;
-    const recs = el.getClientRects();
-    for (const b of recs) {
-      if (b.width < 0.5 && b.height < 0.5) continue;
-      top = Math.min(top, b.top); bottom = Math.max(bottom, b.bottom);
-      left = Math.min(left, b.left); right = Math.max(right, b.right);
-    }
+  for (const b of bands) {
+    top = Math.min(top, b.top); bottom = Math.max(bottom, b.bottom);
+    left = Math.min(left, b.left); right = Math.max(right, b.right);
   }
   if (!Number.isFinite(top)) return null;
   const hr = 11; // half of the 22px handle, which sits on the first/last corner
@@ -1360,6 +1438,7 @@ function hidePop() {
   S.selRange = null;
   setSelecting(false);
   S.selDragging = null;
+  hideSel();
   ['#selA', '#selB'].forEach(id => { const el = $(id); if (el) { el.hidden = true; el.classList.remove('on'); } });
 }
 document.addEventListener('click', e => { if (!e.target.closest('#pop') && !e.target.closest('#rdText') && !e.target.closest('.sel-handle')) hidePop(); });
@@ -2310,5 +2389,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect };
+window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands };
 boot();
