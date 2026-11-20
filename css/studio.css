@@ -1,0 +1,56 @@
+/* ------------------------------ Quote studio ------------------------------ */
+.studio{position:fixed;inset:0;z-index:96;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);opacity:0;transform:translateY(28px);pointer-events:none;transition:opacity .4s var(--ease),transform .5s var(--ease)}
+.studio.show{opacity:1;transform:none;pointer-events:auto}
+@media (min-width:700px){ .studio{max-width:520px;left:50%;right:auto;width:100%;transform:translate(-50%,28px)} .studio.show{transform:translateX(-50%)} }
+.st-top{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:calc(var(--safe-t) + 10px) 16px 6px}
+.st-title{font-family:var(--display);font-size:21px;font-weight:500;text-align:center;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-bookbtn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 13px 0 10px;border-radius:18px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:13px;font-weight:600;transition:color .2s,background .2s,border-color .2s}
+.st-bookbtn svg{width:17px;height:17px}
+.st-bookbtn.on{color:var(--ink);border-color:var(--ink)}
+.st-fmt{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:6px 20px 0;padding:4px;border-radius:22px;background:var(--card);border:1px solid var(--line)}
+.st-fmt button{height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px;color:var(--ink2);transition:background .3s var(--ease),color .3s}
+.st-fmt button b{font-weight:600}.st-fmt button small{font-size:11px;opacity:.55;font-weight:600}
+.st-fmt button.on{background:var(--ink);color:var(--bg)}
+.st-stage{flex:1 1 auto;min-height:0;display:grid;place-items:center;padding:14px 20px 10px}
+.st-frame{position:relative;border-radius:14px;overflow:hidden;box-shadow:0 22px 50px -22px rgba(0,0,0,.45),0 0 0 1px var(--line);background:var(--bg2);transition:width .35s var(--ease),height .35s var(--ease)}
+.st-img{display:block;width:100%;height:100%;object-fit:cover;-webkit-touch-callout:default;-webkit-user-select:none;user-select:none;transition:opacity .2s}
+.st-img:not([src]){opacity:0}
+.st-load{position:absolute;inset:0;display:grid;place-items:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.st-load i{width:26px;height:26px;border-radius:50%;border:2.5px solid rgba(127,127,127,.35);border-top-color:var(--accent);animation:stspin .8s linear infinite}
+.st-frame.busy .st-load{opacity:1;transition-delay:.25s}
+.st-frame.busy .st-img{opacity:.72}
+@keyframes stspin{to{transform:rotate(360deg)}}
+.st-panel{flex:none;padding:0 0 calc(var(--safe-b) + 10px)}
+.st-pals{display:flex;gap:8px;overflow-x:auto;padding:2px 20px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.st-pals::-webkit-scrollbar,.st-strip::-webkit-scrollbar{display:none}
+.st-pal{flex:none;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px 0 5px;border-radius:17px;border:1px solid var(--line);background:var(--card);font-size:12.5px;font-weight:600;color:var(--ink2);transition:border-color .2s,color .2s}
+.st-pal i{width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.st-pal.on{border-color:var(--ink);color:var(--ink)}
+.st-strip{display:flex;gap:10px;overflow-x:auto;padding:4px 20px 12px;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.st-th{flex:none;width:62px;display:flex;flex-direction:column;align-items:center;gap:6px;scroll-snap-align:center}
+.st-thimg{display:block;width:62px;border-radius:9px;overflow:hidden;background:var(--bg2);box-shadow:0 0 0 1px var(--line);transition:box-shadow .2s,transform .25s var(--spring)}
+.st-thimg canvas{display:block;width:100%;height:100%}
+.st-th.on .st-thimg{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+.st-th:active .st-thimg{transform:scale(.94)}
+.st-thname{font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+.st-th.on .st-thname{color:var(--ink)}
+.st-actions{display:flex;gap:10px;padding:2px 20px 0}
+.st-actions .pill-black{flex:1 1 auto;justify-content:center;height:52px;border-radius:26px}
+.st-actions .pill-black svg{width:20px;height:20px}
+.st-save{flex:none;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:52px;padding:0 20px;border-radius:26px;border:1px solid var(--line);background:var(--card);font-weight:600;font-size:15px;transition:transform .25s var(--spring)}
+.st-save svg{width:20px;height:20px}
+.st-save:active{transform:scale(.94)}
+.st-hint{padding:9px 28px 0;font-size:11.5px;line-height:1.35;color:var(--muted);text-align:center}
+@media (max-height:700px){ .st-hint{display:none} .st-stage{padding-top:8px} }
+body.studio-on #dock{visibility:hidden}
+
+/* My quotes list */
+.qcard.q2{background:var(--card);color:var(--ink);cursor:pointer;padding:22px 20px 16px}
+.qcard.q2 .qm{color:var(--accent)}
+.qcard.q2 .qt{display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+.qcard.q2 .qb{align-items:center}
+.qcard.q2 .qsty{font-size:11px;color:var(--muted);font-weight:600;margin-top:6px}
+.qcard.q2 .qopen{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px 0 11px;border-radius:18px;background:var(--pill);color:var(--pill-fg);font-weight:600;font-size:13px;transition:transform .2s var(--spring)}
+.qcard.q2 .qopen svg{width:16px;height:16px}
+.qcard.q2 .qopen:active{transform:scale(.94)}
+.qcard.q2:active{transform:scale(.99)}

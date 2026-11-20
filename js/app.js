@@ -1,17 +1,19 @@
-import { db } from './db.js?v=1.4.0';
-import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.4.0';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.4.0';
-import { coverSVG, autoCover } from './covers.js?v=1.4.0';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.4.0';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.4.0';
-import { Player } from './player.js?v=1.4.0';
-import { translateMany } from './translate.js?v=1.4.0';
-import { track, summary } from './stats.js?v=1.4.0';
-import { renderCard, shareCard } from './quotes.js?v=1.4.0';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.4.0';
-import { SAMPLES } from './samples.js?v=1.4.0';
+import { db } from './db.js?v=1.4.1';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.4.1';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.4.1';
+import { coverSVG, autoCover } from './covers.js?v=1.4.1';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.4.1';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.4.1';
+import { Player } from './player.js?v=1.4.1';
+import { translateMany } from './translate.js?v=1.4.1';
+import { track, summary } from './stats.js?v=1.4.1';
+import { renderCard, shareCard } from './quotes.js?v=1.4.1';
+import { openStudio, defaultStyle } from './studio.js?v=1.4.1';
+import { presetById, FORMATS } from './qrender.js?v=1.4.1';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.4.1';
+import { SAMPLES } from './samples.js?v=1.4.1';
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.4.1';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -2039,7 +2041,7 @@ function openNav(tab = 'toc') {
           el.querySelectorAll('[data-a]').forEach(btn => btn.onclick = async ev => {
             ev.stopPropagation();
             const q = qs.find(x => x.id === el.dataset.q); if (!q) return;
-            if (btn.dataset.a === 'share') { const r = await shareCard(q, q.th || 'paper'); if (r === 'downloaded') toast('PNG ✓'); }
+            if (btn.dataset.a === 'share') { closeSheet(); openStudio(q, { toast }); }
             if (btn.dataset.a === 'del') { await db.del('quotes', q.id); paint('quotes'); }
           });
         });
@@ -2316,18 +2318,17 @@ async function saveQuote(text) {
 async function renderQuotes() {
   const qs = (await db.all('quotes')).sort((a, b) => b.at - a.at);
   const el = $('#quoteList');
-  if (!qs.length) { el.innerHTML = `<div class="empty">${t('noQuotes')}</div>`; return; }
-  el.innerHTML = qs.map((q, i) => `<div class="qcard" data-th="${q.th || 'paper'}" data-q="${q.id}" style="animation-delay:${i * .05}s">
+  if (!qs.length) { el.innerHTML = `<div class="empty">${t('noQuotes2')}</div>`; return; }
+  const styleLabel = q => { const st = defaultStyle(q), p = presetById(st.p), f = FORMATS[st.f]; const ru = uiLang() === 'ru'; return q.style ? `${ru ? p.ru : p.en} · ${ru ? f.ru : f.en}` : ''; };
+  el.innerHTML = qs.map((q, i) => `<div class="qcard q2" data-q="${q.id}" style="animation-delay:${Math.min(i, 10) * .05}s" role="button" tabindex="0">
     <div class="qm">“</div><div class="qt">${esc(q.text)}</div>
-    <div class="qb"><div><div class="qs">${esc(q.title)}</div><div class="qa">${esc(q.author || '')}</div></div>
-    <div class="qact"><button class="th ${q.th === 'paper' || !q.th ? 'on' : ''}" data-th="paper" style="background:#EFEDEA" aria-label="Paper"></button><button class="th ${q.th === 'ink' ? 'on' : ''}" data-th="ink" style="background:#17171B" aria-label="Ink"></button><button class="th ${q.th === 'ember' ? 'on' : ''}" data-th="ember" style="background:#FF5A36" aria-label="Ember"></button>
-    <button class="qbtn" data-a="share" aria-label="${t('share')}">${ICON.share}</button><button class="qbtn" data-a="del" aria-label="${t('delete')}">${ICON.trash}</button></div></div></div>`).join('');
+    <div class="qb"><div><div class="qs">${esc(q.title)}</div><div class="qa">${esc(q.author || '')}</div>${q.style ? `<div class="qsty">${esc(styleLabel(q))}</div>` : ''}</div>
+    <div class="qact"><button class="qopen" data-a="open"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 16l4.5-4.5 3.5 3.5 2.5-2.5L20 18M15.5 8.5h.01"/></svg><span>${t('studioOpen')}</span></button><button class="qbtn" data-a="del" aria-label="${t('delete')}">${ICON.trash}</button></div></div></div>`).join('');
   el.onclick = async e => {
-    const card = e.target.closest('.qcard'); if (!card) return; const q = qs.find(x => x.id === card.dataset.q);
-    const th = e.target.closest('[data-th].th'); const a = e.target.closest('[data-a]');
-    if (th) { q.th = th.dataset.th; await db.set('quotes', q.id, q); card.dataset.th = q.th; card.querySelectorAll('.th').forEach(x => x.classList.toggle('on', x === th)); }
-    if (a && a.dataset.a === 'share') { const r = await shareCard(q, q.th || 'paper'); if (r === 'downloaded') toast('PNG ✓'); }
-    if (a && a.dataset.a === 'del') { await db.del('quotes', q.id); card.style.transition = '.3s'; card.style.opacity = 0; card.style.transform = 'scale(.96)'; setTimeout(renderQuotes, 300); }
+    const card = e.target.closest('.qcard'); if (!card) return; const q = qs.find(x => x.id === card.dataset.q); if (!q) return;
+    const a = e.target.closest('[data-a]');
+    if (a && a.dataset.a === 'del') { await db.del('quotes', q.id); card.style.transition = '.3s'; card.style.opacity = 0; card.style.transform = 'scale(.96)'; setTimeout(renderQuotes, 300); return; }
+    openStudio(q, { toast, onClose: () => { if (S.screen === 'quotes') renderQuotes(); } });
   };
 }
 window.__murmurRenderCard = renderCard; // used by tests
