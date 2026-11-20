@@ -5,9 +5,9 @@
 // chunk = { text, map:[{start,end,w}], lang }. opts = { voice, rate, volume, onWord(w), onEnd(), onError(e) }
 // A premium engine (ElevenLabs / Grok TTS / Azure) only needs to return audio + word timings
 // to reuse AudioEngine below — see createAudioEngine({ synth }).
-import { norm } from './text.js?v=1.3.4';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.4';
-import { db } from './db.js?v=1.3.4';
+import { norm } from './text.js?v=1.3.5';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.5';
+import { db } from './db.js?v=1.3.5';
 
 const NOVELTY = /^(Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Deranged|Good News|Hysterical|Jester|Junior|Organ|Pipe Organ|Ralph|Superstar|Trinoids|Whisper|Wobble|Zarvox|Fred|Kathy|Grandma|Grandpa|Eddy|Flo|Reed|Rocko|Sandy|Shelley)\b/i;
 const LANG_NAMES = (() => { try { return new Intl.DisplayNames(['en'], { type: 'language' }); } catch { return null; } })();
@@ -129,9 +129,10 @@ export function createAudioEngine({ id, synth, listVoices, health, defaults }) {
   return {
     id, canPause: true, audio, synthRaw: synth,
     async ready() { try { return await health(); } catch { return false; } },
+    invalidateVoices() { vcache = null; },
     async voices() { if (!vcache) vcache = await listVoices(); return vcache; },
     defaultVoice(lang, voices) { const d = defaults[lang]; if (d && voices.some(v => v.id === d)) return d; return (voices.find(v => v.lang === lang) || voices.find(v => v.multi) || voices[0])?.id; },
-    prefetch(chunk, voice) { if (chunk && chunk.text) get(chunk.text, voice).catch(() => {}); },
+    prefetch(chunk, voice) { if (chunk && chunk.text && chunk.text.trim()) get(chunk.text, voice).catch(() => {}); },
     unlock() { try { if (audio.paused && !audio.src) { audio.src = SILENT; audio.play().catch(() => {}); } } catch {} },
     play(chunk, o) {
       const my = ++token; let raf = 0, stopped = false, last = -1, marks = null;
@@ -189,6 +190,16 @@ function rememberTts(k, v) {
   try { localStorage.setItem('murmur:ttsKeys', JSON.stringify(keys)); } catch {}
   db.set('kv', k, v);
 }
+const ttsTimes = [];
+function noteTts(text, t0, src) {
+  const ms = Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0);
+  ttsTimes.push({ ms, src, n: (text || '').length, t: Date.now() });
+  if (ttsTimes.length > 40) ttsTimes.shift();
+}
+export const ttsStats = () => ttsTimes.slice();
+
+let relayFailStreak = 0;
+const relayFails = () => relayFailStreak;
 export function createEdgeEngine(getBase) {
   const b64 = s => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
   const timeout = (ms) => { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; };
@@ -200,43 +211,60 @@ export function createEdgeEngine(getBase) {
     defaults: Object.fromEntries(Object.entries(CURATED).map(([l, ids]) => [l, ids[0]])),
     async health() {
       await loadStatic();
-      const base = getBase(); relayOk = false;
-      if (base) { try { const r = await fetch(base + '/health', { signal: timeout(4000), cache: 'no-store' }); relayOk = r.ok && (await r.json()).ok === true; } catch { relayOk = false; } }
-      return relayOk;
+      const base = getBase();
+      if (!base) { relayOk = false; return false; }
+      let ok = false, lastErr = null;
+      for (let i = 0; i < 3 && !ok; i++) {
+        try {
+          const r = await fetch(base + '/health', { signal: timeout(8000), cache: 'no-store' });
+          const j = r.ok ? await r.json().catch(() => null) : null;
+          ok = !!(r.ok && j && j.ok === true);
+          if (!ok) lastErr = new Error('health ' + r.status);
+        } catch (e) { lastErr = e; }
+        if (!ok && i < 2) await new Promise(res => setTimeout(res, 400 * (i + 1)));
+      }
+      // only flip the flag after the probe finishes — never leave relayOk=false mid-request
+      // (that used to make listVoices() cache a tiny fallback list while /health was in flight)
+      if (ok) { relayFailStreak = 0; relayOk = true; }
+      else { relayFailStreak++; if (relayFailStreak >= 2) relayOk = false; }
+      return ok;
     },
     async listVoices() {
-      let list;
-      if (relayOk) { try { list = await (await fetch(getBase() + '/voices', { signal: timeout(8000) })).json(); } catch { list = null; } }
-      if (!list) {
-        const idx = await loadStatic();
-        list = Object.values(idx.voices || {}).map(id => { const [l, c, n] = id.split('-'); return { id, name: n.replace(/(Multilingual)?Neural$/, ''), locale: `${l}-${c}`, lang: l, gender: /Svetlana|Ava|Emma|Aria|Sonia/.test(id) ? 'Female' : 'Male', multi: /Multilingual/.test(id), tags: [] }; });
-      }
-      // curated: only the best voices per language, in quality order (unknown future languages: first 2)
+      // always from the bundled catalog so the picker is complete even after an offline stretch
       const rank = v => { const c = CURATED[v.lang]; return c ? c.indexOf(v.id) : -2; };
-      const extra = {};
-      list = list.filter(v => { const r = rank(v); if (r >= 0) return true; if (r === -2) { extra[v.lang] = (extra[v.lang] || 0) + 1; return extra[v.lang] <= 2; } return false; });
-      return list.map(v => ({ ...v, name: v.name.replace(/Multilingual$/, ''), quality: 4, detail: [regionName(v.locale), v.gender === 'Female' ? '♀' : v.gender === 'Male' ? '♂' : '', v.multi ? 'Multilingual' : ''].filter(Boolean).join(' · '), engine: 'neural' }))
-        .sort((a, b) => a.lang.localeCompare(b.lang) || rank(a) - rank(b));
+      return CATALOG.map(v => ({
+        ...v,
+        name: v.name.replace(/Multilingual$/, ''),
+        quality: 4,
+        detail: [regionName(v.locale), v.gender === 'Female' ? '♀' : v.gender === 'Male' ? '♂' : '', v.multi ? 'Multilingual' : ''].filter(Boolean).join(' · '),
+        engine: 'neural'
+      })).sort((a, b) => a.lang.localeCompare(b.lang) || rank(a) - rank(b));
     },
     async synth(text, voice) {
-      const idx = await loadStatic(), hit = idx.items && idx.items[voice + '|' + text];
-      if (hit) { const r = await fetch(hit[0]); if (r.ok) return { audio: await r.blob(), words: hit[1] }; }
+      const raw = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!raw) { const err = new Error('empty'); err.skip = true; throw err; }
+      const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const idx = await loadStatic(), hit = idx.items && idx.items[voice + '|' + raw];
+      if (hit) { const r = await fetch(hit[0]); if (r.ok) { noteTts(raw, t0, 'static'); return { audio: await r.blob(), words: hit[1] }; } }
       // persistent cache: re-listening (or coming back to a book) is instant and works offline
-      const ck = ttsKey(text, voice);
+      const ck = ttsKey(raw, voice);
       const saved = await db.get('kv', ck).catch(() => undefined);
-      if (saved && saved.a) return { audio: new Blob([saved.a], { type: 'audio/mpeg' }), words: saved.w };
+      if (saved && saved.a) { noteTts(raw, t0, 'cache'); return { audio: new Blob([saved.a], { type: 'audio/mpeg' }), words: saved.w }; }
       if (!relayOk) throw new Error('neural: no relay for this text');
       let j, lastErr;
-      for (let attempt = 0; attempt < 2 && !j; attempt++) {
+      for (let attempt = 0; attempt < 3 && !j; attempt++) {
         try {
-          const r = await fetch(getBase() + '/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice }), signal: timeout(45000) });
+          const r = await fetch(getBase() + '/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: raw, voice }), signal: timeout(25000) });
+          if (r.status === 400) { const err = new Error('relay 400'); err.skip = true; throw err; }
+          if (r.status === 429) { lastErr = new Error('relay 429'); await new Promise(res => setTimeout(res, 800 * (attempt + 1))); continue; }
           if (!r.ok) throw new Error('relay ' + r.status);
           j = await r.json();
-        } catch (e) { lastErr = e; if (attempt === 0) await new Promise(res => setTimeout(res, 600)); }
+        } catch (e) { lastErr = e; if (e && e.skip) throw e; if (attempt < 2) await new Promise(res => setTimeout(res, 500 * (attempt + 1))); }
       }
       if (!j) throw lastErr;
       const bytes = b64(j.audio);
       rememberTts(ck, { a: bytes.buffer, w: j.words });
+      noteTts(raw, t0, 'relay');
       return { audio: new Blob([bytes], { type: 'audio/mpeg' }), words: j.words };
     }
   });

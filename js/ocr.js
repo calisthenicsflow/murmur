@@ -2,9 +2,9 @@
 // tesseract.js (lazy, from jsDelivr, in a Web Worker) recognises it, and every finished page is
 // saved into the book at once — so it is read/listened to while the rest is still being recognised,
 // and never recognised twice. The PDF itself waits in IndexedDB until the job is done.
-import { db } from './db.js?v=1.3.4';
-import { openPDF } from './importers.js?v=1.3.4';
-import { wc } from './text.js?v=1.3.4';
+import { db } from './db.js?v=1.3.5';
+import { openPDF } from './importers.js?v=1.3.5';
+import { wc } from './text.js?v=1.3.5';
 import { t } from './i18n.js';
 
 const TESS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/';

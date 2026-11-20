@@ -1,6 +1,6 @@
 // Free client-side translation with caching (Google gtx endpoint, MyMemory fallback).
-import { db } from './db.js?v=1.3.4';
-import { hash } from './covers.js?v=1.3.4';
+import { db } from './db.js?v=1.3.5';
+import { hash } from './covers.js?v=1.3.5';
 const mem = new Map();
 const k = (t, from, to) => `tr:${from}:${to}:${hash(t)}:${t.length}`;
 async function google(lines, from, to) {

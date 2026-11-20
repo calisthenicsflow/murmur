@@ -86,11 +86,12 @@ export class Player {
       else if (this.bilingual) { const b = this.bilingual; b.translate(n.trans).then(text => { if (text) (b.engine || this.engine).prefetch({ text, map: [], lang: b.to }, b.voice); }).catch(() => {}); }
     }
     if (c.trans !== undefined) return this.playTrans(c);
+    if (!c.text || !c.text.trim()) { this.ci++; return this.next(); }
     this.ctrl = this.engine.play(c, {
       voice: c.voice || this.voice, rate: this.rate, volume: this.volume,
       onWord: w => { w += c.offW || 0; if (!this.model.words[w]) return; this.cur = w; const s = this.model.words[w].s; if (s !== this.curSent) { this.curSent = s; this.on.sentence(s); } this.on.word(w); },
       onEnd: () => { this.ci++; this.next(); },
-      onError: e => { this.playing = false; this.on.state(); this.on.error(e); }
+      onError: e => { if (e && e.skip) { this.ci++; this.next(); return; } this.playing = false; this.on.state(); this.on.error(e); }
     });
   }
   async playTrans(c) {

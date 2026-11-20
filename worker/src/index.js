@@ -24,7 +24,7 @@ const VOICE_HEADERS = {
 const ALLOWED = /^(https:\/\/calisthenicsflow\.github\.io|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?)$/;
 const MAX_CHARS = 1000;          // per request (Edge renders ~0.6x realtime; keeps requests short and within free-plan CPU)
 const MAX_CHUNK_BYTES = 3500;    // per SSML message (edge-tts limit is ~4096 incl. SSML wrapper)
-const RATE = 60;                 // requests / minute / IP (per isolate, best effort)
+const RATE = 120;                // /tts requests / minute / IP (health & voices do not count)
 const VOICE_RE = /^[a-z]{2,3}-[A-Za-z]{2,4}(-[A-Za-z]+)?-[A-Za-z]+Neural$/;
 const TICKS_PER_SECOND = 10_000_000, MP3_BITRATE_BPS = 48_000;
 
@@ -169,14 +169,14 @@ async function handle(req) {
   const origin = req.headers.get('Origin');
   // Browsers always send Origin on cross-origin POST; block other sites (CORS alone wouldn't stop the work being done).
   if (req.method === 'POST' && !(origin && ALLOWED.test(origin))) return json({ error: 'origin' }, 403);
-  const ip = req.headers.get('CF-Connecting-IP') || '?'; const now = Date.now();
-  const q = (hits.get(ip) || []).filter(t => now - t < 60e3);
-  if (q.length >= RATE) return json({ error: 'rate' }, 429);
-  q.push(now); hits.set(ip, q); if (hits.size > 5000) hits.clear();
-
+  const now = Date.now();
   if (url.pathname === '/health' && req.method === 'GET') return json({ ok: true, engine: 'edge-neural', time: Math.floor(now / 1000) });
   if (url.pathname === '/voices' && req.method === 'GET') return json(await voices(), 200, { 'Cache-Control': 'public, max-age=3600' });
   if (url.pathname === '/tts' && req.method === 'POST') {
+    const ip = req.headers.get('CF-Connecting-IP') || '?';
+    const q = (hits.get(ip) || []).filter(t => now - t < 60e3);
+    if (q.length >= RATE) return json({ error: 'rate' }, 429);
+    q.push(now); hits.set(ip, q); if (hits.size > 5000) hits.clear();
     if (+(req.headers.get('Content-Length') || 0) > 64 * 1024) return json({ error: 'too large' }, 413);
     let body; try { body = await req.json(); } catch { return json({ error: 'bad json' }, 400); }
     const raw = String(body?.text ?? '').replace(/\s+/g, ' ').trim();

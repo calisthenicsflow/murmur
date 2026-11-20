@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.3.4';
+import { db } from './db.js?v=1.3.5';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.4';
-import { coverSVG, autoCover } from './covers.js?v=1.3.4';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.3.4';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.4';
-import { Player } from './player.js?v=1.3.4';
-import { translateMany } from './translate.js?v=1.3.4';
-import { track, summary } from './stats.js?v=1.3.4';
-import { renderCard, shareCard } from './quotes.js?v=1.3.4';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.4';
-import { SAMPLES } from './samples.js?v=1.3.4';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.5';
+import { coverSVG, autoCover } from './covers.js?v=1.3.5';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.3.5';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.3.5';
+import { Player } from './player.js?v=1.3.5';
+import { translateMany } from './translate.js?v=1.3.5';
+import { track, summary } from './stats.js?v=1.3.5';
+import { renderCard, shareCard } from './quotes.js?v=1.3.5';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.5';
+import { SAMPLES } from './samples.js?v=1.3.5';
 
-export const APP_VERSION = '1.3.4';
+export const APP_VERSION = '1.3.5';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -590,6 +590,8 @@ function setCurrent(w, fromPlayer) {
   if (s !== S.curS) {
     if (S.curS >= 0 && S.sentEls[S.curS]) S.sentEls[S.curS].classList.remove('cs');
     S.curS = s; S.sentEls[s]?.classList.add('cs');
+    if (biOn()) ensureTranslations();
+    if (fromPlayer && player.engine?.prefetch) warmFirst();
     const sec = S.model.sents[s].sec ?? S.sec;
     const cn = chapterName(sec, curPara()); if ($('#rdMini').textContent !== cn) { $('#rdMini').textContent = cn; updateMediaSession(); }
     if (sec !== S.sec) {
@@ -625,29 +627,39 @@ function wordRect(el) {
   }
   return { rects: el.getClientRects(), box: el.getBoundingClientRect() };
 }
-/** ink box of a word: typographic ascent/descent around the baseline, plus equal padding. */
-function glyphBox(el, box) {
-  const cs = getComputedStyle(el), font = cs.font, fs = parseFloat(cs.fontSize) || 18;
-  const canvas = glyphBox._c || (glyphBox._c = document.createElement('canvas'));
+/** typographic metrics for a font/size: x-height, cap-height, baseline — not the word's own extenders. */
+function fontInk(cs) {
+  const font = cs.font, fs = parseFloat(cs.fontSize) || 18;
+  const canvas = fontInk._c || (fontInk._c = document.createElement('canvas'));
   const ctx = canvas.getContext('2d');
-  const sample = ((el.textContent || 'Hg').replace(/\s+/g, '') || 'Hg').slice(0, 48);
-  const key = font + '\0' + sample;
-  let m = glyphBox._m?.get(key);
+  const key = font + '|' + fs;
+  let m = fontInk._m?.get(key);
   if (!m) {
     ctx.font = font;
-    const mt = ctx.measureText(sample);
-    m = { asc: mt.actualBoundingBoxAscent || fs * 0.7, desc: mt.actualBoundingBoxDescent || fs * 0.2,
-          fAsc: mt.fontBoundingBoxAscent, fDesc: mt.fontBoundingBoxDescent };
-    (glyphBox._m || (glyphBox._m = new Map())).set(key, m);
-    if (glyphBox._m.size > 80) glyphBox._m.clear();
+    const x = ctx.measureText('нnxх');
+    const cap = ctx.measureText('НNHХ');
+    m = {
+      xh: x.actualBoundingBoxAscent || fs * 0.52,
+      caph: cap.actualBoundingBoxAscent || fs * 0.7,
+      fAsc: x.fontBoundingBoxAscent,
+      fDesc: x.fontBoundingBoxDescent,
+      fs
+    };
+    (fontInk._m || (fontInk._m = new Map())).set(key, m);
+    if (fontInk._m.size > 40) fontInk._m.clear();
   }
-  const lhRaw = parseFloat(cs.lineHeight);
-  const fontH = (Number.isFinite(m.fAsc) && Number.isFinite(m.fDesc)) ? m.fAsc + m.fDesc : fs;
-  const lineH = Number.isFinite(lhRaw) ? lhRaw : fontH;
-  const baseline = box.top + Math.max(0, (box.height - fontH) / 2) + (Number.isFinite(m.fAsc) ? m.fAsc : fs * 0.8);
-  const pad = Math.max(2.5, fs * 0.14);
-  const top = baseline - m.asc - pad, bottom = baseline + m.desc + pad;
-  return { left: box.left, top, width: box.width, height: Math.max(fs * 0.7, bottom - top), pad, fs };
+  return m;
+}
+/** highlight box: x-height (letters without ascenders/descenders) equally padded above and below the baseline. */
+function glyphBox(el, box) {
+  const cs = getComputedStyle(el);
+  const m = fontInk(cs);
+  const fontH = (Number.isFinite(m.fAsc) && Number.isFinite(m.fDesc)) ? m.fAsc + m.fDesc : m.fs;
+  const baseline = box.top + Math.max(0, (box.height - fontH) / 2) + (Number.isFinite(m.fAsc) ? m.fAsc : m.fs * 0.8);
+  const ink = m.xh || m.caph || m.fs * 0.52;
+  const pad = Math.max(4.5, m.fs * 0.28);
+  const top = baseline - ink - pad, bottom = baseline + pad;
+  return { left: box.left, top, width: box.width, height: Math.max(m.fs * 0.85, bottom - top), pad, fs: m.fs, baseline, ink };
 }
 let hlLast = null; // last placement, relative to #rdText: {x, y, w, h, el}
 function positionHL(instant) {
@@ -664,7 +676,7 @@ function positionHL(instant) {
   if (!r0.width && !r0.height) return; // not laid out (hidden / detached) — the watchdog retries
   const r = el.classList.contains('dcw') ? r0 : glyphBox(el, r0);
   // equal horizontal pad, shrunk if needed so the box never overlaps the neighbouring word
-  const want = Math.max(2, Math.min(3, (parseFloat(getComputedStyle(el).fontSize) || 18) * 0.12));
+  const want = Math.max(4, Math.min(7, (parseFloat(getComputedStyle(el).fontSize) || 18) * 0.18));
   const sibs = el.parentElement ? [...el.parentElement.querySelectorAll('.w')] : [];
   const i = sibs.indexOf(el), mid = box => (box.top + box.bottom) / 2;
   const sameLine = (a, b) => a && Math.abs(mid(a) - mid(b)) < Math.min(a.height, b.height) * 0.55;
@@ -764,16 +776,82 @@ $('#rdScroll').addEventListener('scroll', () => {
 }, { passive: true });
 let flowRaf = 0; const flowSoon = () => { if (!flowRaf) flowRaf = requestAnimationFrame(() => { flowRaf = 0; ensureWindow(); }); };
 const updateProgressSoon = debounce(() => updateProgress(), 100);
-// pages: swipe left / right (and wheel, arrow keys on a computer) turn the page with a short slide
+// pages: the column follows the finger live, then snaps with momentum / a halfway threshold
 (() => {
-  const sc = $('#rdScroll'); let x0 = null, y0 = 0, t0 = 0;
-  sc.addEventListener('touchstart', e => { if (!prefs.pages) return; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); }, { passive: true });
-  sc.addEventListener('touchend', e => {
-    if (!prefs.pages || x0 === null) return; const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
-    if (S.selecting || S.selDragging || Date.now() - (S.suppressTap || 0) < 600) return;
-    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2 || Date.now() - t0 > 900) return;
-    turnPage(dx < 0 ? 1 : -1); S.swiped = Date.now();
-  });
+  const sc = $('#rdScroll');
+  let x0 = null, y0 = 0, t0 = 0, l0 = 0, axis = null, lastX = 0, lastT = 0, vel = 0, dragging = false, raf = 0;
+  const vw = () => pageW();
+  const clampLeft = (x) => {
+    const pw = vw(), max = Math.max(0, ($('#rdFlow').scrollWidth || pw) - pw);
+    return Math.max(0, Math.min(max, x));
+  };
+  const live = (left) => {
+    sc.scrollLeft = clampLeft(left);
+    S.progScroll = Date.now();
+    if (S.mode === 'listen') positionHL(true);
+  };
+  sc.addEventListener('touchstart', e => {
+    if (!prefs.pages) return;
+    if (S.selecting || S.selDragging) { x0 = null; return; }
+    const t = e.touches[0];
+    x0 = lastX = t.clientX; y0 = t.clientY; t0 = lastT = Date.now(); l0 = sc.scrollLeft; axis = null; vel = 0; dragging = false;
+    if (S.pgAnim) { cancelAnimationFrame(S.pgAnim); S.pgAnim = 0; }
+  }, { passive: true });
+  sc.addEventListener('touchmove', e => {
+    if (!prefs.pages || x0 === null) return;
+    if (S.selecting || S.selDragging) { x0 = null; return; }
+    const t = e.touches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+    if (!axis) {
+      if (Math.hypot(dx, dy) < 8) return;
+      axis = Math.abs(dx) > Math.abs(dy) * 1.05 ? 'x' : 'y';
+    }
+    if (axis !== 'x') return;
+    e.preventDefault();
+    dragging = true; S.touching = true; S.lastUserScroll = Date.now(); S.lastInteract = Date.now();
+    const now = Date.now(), ddx = t.clientX - lastX, dt = Math.max(8, now - lastT);
+    vel = ddx / dt; lastX = t.clientX; lastT = now;
+    live(l0 - dx);
+  }, { passive: false });
+  const snapTo = (n, velX = 0) => {
+    const pw = vw();
+    n = Math.max(0, Math.min(pageInfo().n - 1, n));
+    const from = sc.scrollLeft, to = n * pw, dist = to - from;
+    if (Math.abs(dist) < 1) { sc.scrollLeft = to; S.pgTarget = n; updateProgress(); maybeExtend(); return; }
+    const speed = Math.min(2.4, Math.max(0.7, Math.abs(velX) * 900 / Math.max(80, Math.abs(dist))));
+    const dur = Math.max(180, Math.min(420, Math.abs(dist) / (pw * speed) * 380));
+    const t0s = performance.now();
+    S.pgTarget = n; S.pgAt = Date.now(); S.progScroll = Date.now();
+    const step = now => {
+      const u = Math.min(1, (now - t0s) / dur);
+      const e = 1 - Math.pow(1 - u, 3);
+      sc.scrollLeft = from + dist * e;
+      if (S.mode === 'listen') positionHL(true);
+      if (u < 1) S.pgAnim = requestAnimationFrame(step);
+      else { S.pgAnim = 0; sc.scrollLeft = to; updateProgress(); maybeExtend(); if (S.mode === 'read' && !player.playing) { S.progScroll = 0; readPosSoon(); } }
+    };
+    if (S.pgAnim) cancelAnimationFrame(S.pgAnim);
+    S.pgAnim = requestAnimationFrame(step);
+  };
+  const endDrag = (t) => {
+    if (!prefs.pages || x0 === null) return;
+    const was = dragging; const dx = (t ? t.clientX : lastX) - x0; const axisX = axis === 'x';
+    x0 = null; axis = null; dragging = false; S.touching = false;
+    if (!axisX || S.selecting || S.selDragging) return;
+    S.swiped = Date.now(); S.lastUserScroll = Date.now();
+    const pw = vw(), pos = sc.scrollLeft, i = Math.round(l0 / pw);
+    // if they dragged toward a missing prev/next chapter, grow the window first
+    if (dx > 40 && i === 0) { if (prependPrev()) requestAnimationFrame(() => snapTo(pageInfo().i - 1, vel)); else snapTo(0, vel); return; }
+    if (dx < -40 && i >= pageInfo().n - 1) { if (!appendNext()) { snapTo(i, vel); return; } }
+    const ni = pageInfo();
+    const progress = (pos - i * pw) / pw; // -1..1 relative to start page, after possible prepend
+    const start = Math.round(l0 / pw);
+    let target = start;
+    if (Math.abs(vel) > 0.35) target = vel < 0 ? start + 1 : start - 1;
+    else if (Math.abs((pos / pw) - start) > 0.28) target = pos / pw > start ? start + 1 : start - 1;
+    snapTo(target, vel);
+  };
+  sc.addEventListener('touchend', e => endDrag(e.changedTouches[0]));
+  sc.addEventListener('touchcancel', e => endDrag(e.changedTouches[0]));
   let wl = 0;
   sc.addEventListener('wheel', e => { if (!prefs.pages) return; e.preventDefault(); if (Date.now() - wl < 450) return; const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY; if (Math.abs(d) < 8) return; wl = Date.now(); turnPage(d > 0 ? 1 : -1); }, { passive: false });
   addEventListener('keydown', e => {
@@ -818,7 +896,11 @@ const savePosSoon = debounce(savePos, 1500);
 const savePosNow = () => { if (S.book && S.screen === 'reader' && S.model && S.curS >= 0) { S.book.pos = placeOf(S.model.sents[S.curS].words[0]); savePos(); } };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') savePosNow(); });
 window.addEventListener('pagehide', savePosNow);
-window.addEventListener('resize', () => positionHL(true));
+window.addEventListener('resize', () => { positionHL(true); positionHandles(); });
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', () => { positionHL(true); positionHandles(); });
+  visualViewport.addEventListener('scroll', () => { positionHL(true); positionHandles(); });
+}
 $('#app').addEventListener('scroll', () => { $('#app').scrollLeft = 0; $('#app').scrollTop = 0; });
 document.fonts && document.fonts.ready.then(() => positionHL(true));
 document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => requestAnimationFrame(() => positionHL(true)));
@@ -953,16 +1035,32 @@ function applySel(a, b) {
   for (let i = a; i <= b; i++) S.sentEls[i]?.classList.add('sel');
   positionHandles();
 }
+function scrollerXY(clientX, clientY) {
+  const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
+  return { x: clientX - sr.left + sc.scrollLeft, y: clientY - sr.top + sc.scrollTop };
+}
+/** first/last word box of a sentence — word spans, not ::first-letter Range quirks. */
+function sentEdgeRect(node, end) {
+  if (!node || !node.isConnected) return null;
+  const words = node.querySelectorAll('.w');
+  const el = words.length ? words[end ? words.length - 1 : 0] : node;
+  const recs = el.getClientRects();
+  if (recs.length) return recs[end ? recs.length - 1 : 0];
+  const box = el.getBoundingClientRect();
+  if (box.width || box.height) return box;
+  const all = node.getClientRects();
+  return all.length ? (end ? all[all.length - 1] : all[0]) : box;
+}
 function positionHandles() {
   const a = $('#selA'), b = $('#selB'), r = S.selRange;
   if (!a || !b) return;
   if (!r || !$('#pop').classList.contains('show')) { a.classList.remove('on'); b.classList.remove('on'); a.hidden = true; b.hidden = true; return; }
-  const sc = $('#rdScroll'), sr = sc.getBoundingClientRect(), size = 22;
+  const size = 22;
   const place = (el, sent, end) => {
-    const node = S.sentEls[sent]; if (!node || !node.isConnected) { el.classList.remove('on'); el.hidden = true; return; }
-    const recs = node.getClientRects(); if (!recs.length) { el.classList.remove('on'); el.hidden = true; return; }
-    const box = end ? recs[recs.length - 1] : recs[0];
-    el.style.transform = `translate(${(end ? box.right : box.left) - sr.left + sc.scrollLeft - size / 2}px, ${(end ? box.bottom : box.top) - sr.top + sc.scrollTop - size / 2}px)`;
+    const node = S.sentEls[sent]; const box = sentEdgeRect(node, end);
+    if (!box || !(box.width + box.height)) { el.classList.remove('on'); el.hidden = true; return; }
+    const p = scrollerXY(end ? box.right : box.left, end ? box.bottom : box.top);
+    el.style.transform = `translate(${p.x - size / 2}px, ${p.y - size / 2}px)`;
     el.hidden = false; el.classList.add('on');
   };
   place(a, r.a, false); place(b, r.b, true);
@@ -1081,9 +1179,10 @@ function setMode_(m, silent) {
 $('#dSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.mode === 'listen') { unlockAudio(); warmFirst(); } setMode(b.dataset.mode); };
 
 function engine() {
-  if (prefs.engine === 'device' || S.neuralFailed) return device;
+  if (prefs.engine === 'device') return device;
   if (S.neuralOk) return neural;                                         // relay online: any text
   if (S.book && S.staticBooks && S.staticBooks.has(S.book.id)) return neural; // pre-voiced sample book
+  if (S.neuralFailed) return device;                                      // temporary playback fallback only
   return device;
 }
 function voiceKey(lang, eng = engine()) { return eng.id + ':' + lang; }
@@ -1111,7 +1210,14 @@ async function setupBilingualVoice() {
 }
 /** fetch the audio of the sentence that would play next, so Play starts instantly */
 async function warmFirst() {
-  try { await S.voiceReady; if (!S.model || player.playing) return; player.engine = engine(); const c = player.build(Math.max(0, S.curW))[0]; if (c && c.trans === undefined) player.engine.prefetch(c, c.voice || player.voice); } catch {}
+  try {
+    await S.voiceReady; if (!S.model || player.playing) return;
+    player.engine = engine();
+    const chunks = player.build(Math.max(0, S.curW));
+    for (let i = 0; i < Math.min(3, chunks.length); i++) {
+      const c = chunks[i]; if (c && c.trans === undefined && c.text && c.text.trim()) player.engine.prefetch(c, c.voice || player.voice);
+    }
+  } catch {}
 }
 function unlockAudio() { try { engine().unlock?.(); } catch {} }
 async function startPlayback(w) {
@@ -1144,10 +1250,17 @@ player.on.end = () => {
 player.on.error = e => {
   console.warn('speech error', e);
   $('#pPlay').classList.remove('loading');
+  if (e && e.skip) { // cleaned/empty sentence: jump to the next one instantly
+    try { player.ci++; player.playing = true; player.next(); } catch {}
+    return;
+  }
   if (player.engine && player.engine.id === 'neural') {
-    S.neuralOk = false; S.neuralFailed = true; toast(t('neuralOff'), 3200);
-    syncVoice().then(() => startPlayback(S.curW >= 0 ? S.curW : 0));
-    clearTimeout(S.reNeural); S.reNeural = setTimeout(async () => { S.neuralFailed = false; if (!(await checkRelay()) && !(S.book && S.staticBooks?.has(S.book.id))) S.neuralFailed = true; else if (!player.playing) syncVoice(); }, 45000);
+    // temporary device fallback for playback only — never write the device voice into prefs.voices
+    S.neuralFailed = true;
+    toast(t('neuralOff'), 2800);
+    const w = S.curW >= 0 ? S.curW : 0;
+    syncVoice().then(() => startPlayback(w));
+    scheduleRelayProbe(4000);
   }
 };
 // translation line being voiced: the highlight leaves the original and walks the translation
@@ -1196,6 +1309,15 @@ function focusWord(w) {
   const active = S.mode === 'listen' && (player.playing || player.paused);
   cur.classList.toggle('speaking', active);
   cur.querySelectorAll('.w').forEach(el => { const i = +el.dataset.fw; el.classList.toggle('cw', active && i === w); el.classList.toggle('done', active && i < w); });
+  const el = cur.querySelector('.w.cw');
+  if (el) {
+    const box = el.getBoundingClientRect();
+    const g = glyphBox(el, box);
+    const padX = Math.max(3.5, g.fs * 0.16);
+    el.style.setProperty('--fhl-top', (g.top - box.top).toFixed(2) + 'px');
+    el.style.setProperty('--fhl-h', g.height.toFixed(2) + 'px');
+    el.style.setProperty('--fhl-padx', padX.toFixed(2) + 'px');
+  }
 }
 function toggleFocus(on = !prefs.focus) { prefs.focus = on; savePrefs(); renderFocus(true); }
 $('#pFocus').onclick = () => toggleFocus();
@@ -1285,16 +1407,31 @@ function fillTr(s, x) {
 let trRun = 0;
 async function ensureTranslations() {
   const my = ++trRun, k = transKey(), arr = S.trans[k] = S.trans[k] || [];
-  const n = S.model.sents.length, start = Math.max(0, S.curS - 2);
+  if (!S.model) return;
+  const n = S.model.sents.length, start = Math.max(0, S.curS - 1);
   const order = [...Array(n).keys()].slice(start).concat([...Array(start).keys()]);
-  for (let i = 0; i < order.length; i += 10) {
-    if (my !== trRun || !biOn()) return;
-    const idx = order.slice(i, i + 10).filter(s => !arr[s]); if (!idx.length) continue;
+  const take = (from, count) => {
+    const idx = [];
+    for (let i = from; i < order.length && idx.length < count; i++) if (!arr[order[i]]) idx.push(order[i]);
+    return idx;
+  };
+  const run = async (idx) => {
+    if (my !== trRun || !biOn() || !idx.length) return 0;
     const res = await translateMany(idx.map(s => S.model.sents[s].text), S.book.lang, biTarget()).catch(() => []);
-    if (my !== trRun) return;
+    if (my !== trRun) return -1;
     let fails = 0;
     idx.forEach((s, j) => { if (res[j]) { arr[s] = res[j]; fillTr(s, res[j]); } else fails++; });
-    if (fails === idx.length) { toast(t('translationFail')); idx.forEach(s => { const el = $(`.tr[data-t="${s}"]`); if (el) { el.classList.remove('load'); el.textContent = '—'; } }); return; }
+    return fails === idx.length ? idx.length : 0;
+  };
+  // first 4 around the current place, then two batches in parallel
+  if (await run(take(0, 4)) < 0) return;
+  for (let guard = 0; guard < 40; guard++) {
+    if (my !== trRun || !biOn()) return;
+    const a = take(0, 6), b = take(a.length, 6);
+    if (!a.length) return;
+    const rs = await Promise.all([run(a), b.length ? run(b) : Promise.resolve(0)]);
+    if (rs.some(x => x < 0)) return;
+    if (rs[0] > 0 && rs[0] === a.length && (!b.length || rs[1] === b.length)) { toast(t('translationFail')); [...a, ...b].forEach(s => { const el = $(`.tr[data-t="${s}"]`); if (el) { el.classList.remove('load'); el.textContent = '—'; } }); return; }
   }
 }
 function setBilingual(on) {
@@ -1514,7 +1651,8 @@ async function openVoices() {
     <div class="sh-label">${t('relay')}</div>
     <div style="display:flex;gap:8px"><input class="inp" id="relayIn" type="url" autocapitalize="off" placeholder="https://…" value="${esc(prefs.relay || S.cfgRelay || '')}"><button class="chip" id="relayGo" style="height:auto;padding:0 16px">OK</button></div>
     <div class="note">${t('relayHint')}</div>`, async body => {
-    const eng = () => engine();
+    const eng = () => prefs.engine === 'device' ? device : neural;
+    probeRelay({ reason: 'sheet' });
     const ui = uiLang();
     const label = l => { const nat = nativeName(l), loc = langName(l, ui); return nat.toLowerCase() === loc.toLowerCase() ? nat : `${nat} · ${loc}`; };
     const paintLang = async () => {
@@ -1525,9 +1663,10 @@ async function openVoices() {
       body.querySelector('#tlSel').innerHTML = langs.map(l => `<option value="${l}" ${l === bl ? 'selected' : ''}>${esc(label(l))}</option>`).join('');
     };
     const paint = async () => {
-      const e = eng(); const neuralSel = prefs.engine !== 'device'; const bl = S.book.lang;
+      const neuralSel = prefs.engine !== 'device'; const bl = S.book.lang;
+      const e = neuralSel ? neural : device;
       body.querySelectorAll('#sgEng button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'neural') === neuralSel));
-      const st = S.neuralOk ? `<span class="status ok"><i></i>${t('online')}</span> · ${t('neuralHint')}` : (e.id === 'neural' ? `<span class="status ok"><i></i>${t('neural')}</span> · ${t('neuralSamples')}` : `<span class="status"><i></i>${t('offline')}</span> · ${t('neuralOffBook')}`);
+      const st = S.neuralOk ? `<span class="status ok"><i></i>${t('online')}</span> · ${t('neuralHint')}` : (S.staticBooks && S.book && S.staticBooks.has(S.book.id) ? `<span class="status ok"><i></i>${t('neural')}</span> · ${t('neuralSamples')}` : `<span class="status"><i></i>${t('offline')}</span> · ${t('neuralOffBook')}`);
       body.querySelector('#engNote').innerHTML = neuralSel ? st : t('deviceHint');
       const vs = await e.voices().catch(() => []); const q = body.querySelector('#vSearch').value.trim().toLowerCase();
       const cur = trOnly() && player.bilingual ? player.bilingual.voice : player.voice;
@@ -1544,7 +1683,7 @@ async function openVoices() {
       const b = e.target.closest('button'); if (!b) return;
       stopPreview();
       prefs.engine = b.dataset.v === 'device' ? 'device' : 'auto'; savePrefs();
-      if (prefs.engine !== 'device' && !S.neuralOk) await checkRelay();
+      if (prefs.engine !== 'device') await probeRelay({ reason: 'sheet' });
       const wasPlaying = player.playing; player.stop(); await syncVoice(); paint(); paintLang(); if (wasPlaying) startPlayback(S.curW);
     };
     body.querySelector('#tlSel').onchange = async e => {
@@ -1569,11 +1708,11 @@ async function openVoices() {
       const bl = S.book.lang, vl = r.dataset.l, id = r.dataset.v;
       const apply = async () => { const wasPlaying = player.playing; await syncVoice(); paint(); if (wasPlaying) startPlayback(S.curW); else warmFirst(); };
       if (sameLang(vl, bl)) {
-        prefs.voices[voiceKey(bl)] = id; savePrefs();
+        prefs.voices[voiceKey(bl, prefs.engine === 'device' ? device : neural)] = id; savePrefs();
         if (trOnly()) { await exitTrOnly(); paint(); return; }
         return apply();
       }
-      if (biOn() && sameLang(vl, biTarget())) { prefs.voices[voiceKey(biTarget())] = id; savePrefs(); return apply(); }
+      if (biOn() && sameLang(vl, biTarget())) { prefs.voices[voiceKey(biTarget(), prefs.engine === 'device' ? device : neural)] = id; savePrefs(); return apply(); }
       const vname = r.querySelector('b')?.textContent || '';
       const yes = await askTranslate(bl, vl, vname);
       if (!yes) return;
@@ -1719,9 +1858,43 @@ function updateMediaSession() {
 /* ------------------------------ relay / boot ------------------------------ */
 async function checkRelay() {
   S.relay = (prefs.relay || S.cfgRelay || '').replace(/\/$/, '');
-  S.neuralOk = await neural.ready();
-  try { const idx = await fetch('audio/index.json').then(r => r.json()); S.staticBooks = new Set(Object.keys(idx.books || {})); } catch { S.staticBooks = new Set(); }
+  const ok = await neural.ready();
+  if (ok) {
+    S.neuralOk = true;
+    if (S.neuralFailed) { S.neuralFailed = false; if (S.book && prefs.engine !== 'device') syncVoice(); }
+  } else {
+    // engines.js keeps relayOk sticky until two failed probes
+    S.neuralOk = !!neural.relayOnline?.();
+  }
+  try { const idx = await fetch('audio/index.json').then(r => r.json()); S.staticBooks = new Set(Object.keys(idx.books || {})); } catch { if (!S.staticBooks) S.staticBooks = new Set(); }
   return S.neuralOk;
+}
+/** re-probe the Worker: online event, visibility, voice sheet, or backoff after a drop. */
+function scheduleRelayProbe(ms) {
+  clearTimeout(S.reNeural);
+  S.reNeural = setTimeout(() => probeRelay({ reason: 'retry' }), ms);
+}
+async function probeRelay(opts = {}) {
+  if (S.probeBusy) return S.neuralOk;
+  S.probeBusy = true;
+  try {
+    const was = S.neuralOk, failed = S.neuralFailed;
+    const ok = await checkRelay();
+    if (ok && (failed || !was) && S.book && prefs.engine !== 'device') {
+      neural.invalidateVoices?.();
+      await syncVoice();
+    }
+    if (!ok) scheduleRelayProbe(Math.min(60000, (S.probeBackoff = Math.min(60000, (S.probeBackoff || 4000) * 1.7))));
+    else S.probeBackoff = 4000;
+    return ok;
+  } finally { S.probeBusy = false; }
+}
+function watchRelay() {
+  if (S.relayWatched) return; S.relayWatched = true;
+  window.addEventListener('online', () => probeRelay({ reason: 'online' }));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') probeRelay({ reason: 'visible' }); });
+  window.addEventListener('pageshow', () => probeRelay({ reason: 'pageshow' }));
+  setInterval(() => { if (document.visibilityState === 'visible') probeRelay({ reason: 'tick' }); }, 60000);
 }
 async function boot() {
   applyLook(); applyI18n();
@@ -1732,6 +1905,7 @@ async function boot() {
   if (pend) { ensureOCRListener(); ocrMod().then(o => o.runOCR(pend)); }
   $('#ocrPill button').onclick = async () => { const b = S.book; if (!b || !b.ocr) return; const o = await ocrMod(); ensureOCRListener(); if (o.ocrRunning(b.id)) { o.cancelOCR(b.id); } else { b.ocr.state = 'queued'; updateOCRPill(b); o.runOCR(b); } };
   try { const c = await fetch('config.json', { cache: 'no-store' }).then(r => r.json()); S.cfgRelay = c.relay || ''; } catch {}
+  watchRelay();
   checkRelay().then(() => { if (S.book) syncVoice(); });
   device.voices().then(v => { S.deviceVoices = v; });
   $('#pFocus').classList.toggle('on', !!prefs.focus); $('#pBi').classList.toggle('on', !!prefs.bi);
@@ -1773,5 +1947,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, shareSelection, buildModel };
+window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus };
 boot();
