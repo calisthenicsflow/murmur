@@ -1,8 +1,15 @@
 // Text model: paragraphs → sentences → words, with "filler" detection.
 const URL_RE = /^(\(?)(https?:\/\/|www\.)\S+$/i;
-const FOOT_RE = /^(\[\d{1,3}\]|\(\d{1,3}\)|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*{1,3}|†|‡)$/;
-const TRAIL_FOOT = /(\[\d{1,3}\]|[¹²³⁴⁵⁶⁷⁸⁹⁰]+)(?=[.,;:!?»”"')]*$)/;
+const SUPER = '[¹²³⁴⁵⁶⁷⁸⁹⁰]{1,4}';
+const BRACK = '\\[\\d{1,3}\\]|\\(\\d{1,3}\\)|\\{\\d{1,3}\\}';
+const FOOT_ONLY = new RegExp(`^(?:${BRACK}|${SUPER}|\\*{1,3}|†|‡|[\\[(]\\d{1,3})[.,;:]?$`);
+const TRAIL_MARK = new RegExp(`(?:${BRACK}|${SUPER})+(?=[.,;:!?…»”"')\\]]*$)`);
+// only sentence-final punctuation: "дискретно.1". Never decimals (0,1), ratios (50:50), ranges (50–60), formulas (CO2).
+const TRAIL_PUNCT_DIGITS = /([.!?…»”"'')\]]+)\d{1,3}$/u;
+const TRAIL_WORD_DIGITS = /(\p{L}{3,})\d{1,3}(?=[.,:;!?…»”"'')\]]*$)/u;
 const PAGE_RE = /^(\d{1,4}|-\s?\d{1,4}\s?-|page \d{1,4}|стр\.? \d{1,4}|p\. ?\d{1,4})$/i;
+const PUNCT_END = /[.,:;!?…»”"'')\]]+$/;
+const SHORT_ABBR = /^\p{L}{1,4}\.$/u; // "Рис.", "табл.", "Fig." — not a sentence end
 
 // ---------- language detection (script first, then stop-word scoring for Latin/Cyrillic) ----------
 const SCRIPTS = [
@@ -161,11 +168,27 @@ function tokens(st, lang) {
   return out;
 }
 
-export function sayOf(tok, skipFiller) {
+/** strip footnote markers from a token; keep real numbers (years, "1000 к 1", "Глава 1").
+    prev is the previous raw token in the paragraph (may be from the previous sentence). */
+export function sayOf(tok, skipFiller, prev = '', next = '') {
   if (!skipFiller) return tok;
-  if (URL_RE.test(tok) || FOOT_RE.test(tok)) return '';
-  return tok.replace(TRAIL_FOOT, '');
+  if (URL_RE.test(tok) || FOOT_ONLY.test(tok)) return '';
+  let s = tok.replace(TRAIL_MARK, '');
+  s = s.replace(TRAIL_PUNCT_DIGITS, '$1');
+  s = s.replace(TRAIL_WORD_DIGITS, '$1');
+  if (s !== tok && !/[\p{L}\p{N}]/u.test(s)) return ''; // only a leftover mark
+  // a bare 1–3 digit token: a footnote if it follows punctuation, or starts a sentence
+  // before a capital (". 1 Они"); keep "Глава 1", "1000 к 1", "12 человек"
+  if (/^\d{1,3}$/.test(tok) || /^\d{1,3}$/.test(s)) {
+    // after punctuation: a leftover footnote if nothing follows, or a new capital sentence (". 1 Они");
+    // keep quantities that continue in lowercase ("случаев. 12 человек")
+    if (PUNCT_END.test(prev) && !SHORT_ABBR.test(prev) && (!next || /^\p{Lu}/u.test(next))) return '';
+    return tok;
+  }
+  return s;
 }
+export const isFootnoteTok = (tok, say) => !!tok && say !== tok;
+
 
 export function buildModel(text, lang, skipFiller) {
   const paras = [], sents = [], words = [];
@@ -173,15 +196,20 @@ export function buildModel(text, lang, skipFiller) {
   for (const rp of rawParas) {
     const pIdx = paras.length, para = { sents: [], skip: skipFiller && PAGE_RE.test(rp) };
     paras.push(para);
+    let prevTok = '';
     for (const st of splitSentences(rp, lang)) {
       const sIdx = sents.length, sent = { words: [], para: pIdx, lang: sentenceLang(st, lang) };
-      for (const { t: tok, ns } of tokens(st, lang)) {
+      const toks = tokens(st, lang);
+      for (let ti = 0; ti < toks.length; ti++) {
+        const { t: tok, ns } = toks[ti];
         if (!tok) continue;
-        let say = para.skip ? '' : sayOf(tok, skipFiller);
+        const nextTok = (toks[ti + 1] && toks[ti + 1].t) || '';
+        let say = para.skip ? '' : sayOf(tok, skipFiller, prevTok, nextTok);
         // punctuation left over after removing a link/footnote sticks to the previous spoken word
         if (say && say !== tok && !/[\p{L}\p{N}]/u.test(say)) { const prev = [...sent.words].reverse().map(i => words[i]).find(x => x.say); if (prev) { prev.say += say; say = ''; } }
         sent.words.push(words.length);
         words.push(ns ? { t: tok, say, s: sIdx, ns: true } : { t: tok, say, s: sIdx });
+        prevTok = tok;
       }
       if (!sent.words.length) continue;
       sent.text = sent.words.map(w => words[w].t + (words[w].ns ? '' : ' ')).join('').trim();

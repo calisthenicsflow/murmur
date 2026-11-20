@@ -1,8 +1,8 @@
 // Universal book import: the format is sniffed from the bytes (magic numbers / zip contents),
 // never trusted from the file name or MIME type (iOS Files often says application/octet-stream).
 // Loaded lazily the first time a file is imported.
-import { splitSections, detectLang, wc } from './text.js?v=1.3.2';
-import { fromText, fromPDF, fromEPUB, mdToText, itemsToBook, joinTitle } from './importers.js?v=1.3.2';
+import { splitSections, detectLang, wc } from './text.js?v=1.3.3';
+import { fromText, fromPDF, fromEPUB, mdToText, itemsToBook, joinTitle } from './importers.js?v=1.3.3';
 
 export class ImportError extends Error { constructor(code, fmt) { super(code); this.code = code; this.fmt = fmt || ''; } }
 
@@ -42,7 +42,8 @@ export function decodeText(u8, declared) {
 const BLOCK = 'h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,div,dd,dt,td,tr';
 export function htmlToBook(html, fallbackTitle) {
   const doc = new DOMParser().parseFromString(html.replace(/<mbp:pagebreak\s*\/?>/gi, '<hr data-pb="1">'), 'text/html');
-  doc.querySelectorAll('script,style,noscript,nav,header>nav,svg,img,sup a[href^="#"],a[href^="#fn"],.footnote,.pagenum,[epub\\:type="pagebreak"]').forEach(n => n.remove());
+  doc.querySelectorAll('script,style,noscript,nav,header>nav,svg,img,sup a[href^="#"],a[href^="#fn"],a[href^="#note"],.footnote,.pagenum,[epub\\:type="pagebreak"],[epub\\:type="noteref"],aside.footnote,aside.footnotes').forEach(n => n.remove());
+  doc.querySelectorAll('sup,a').forEach(a => { const href = a.getAttribute('href') || '', typ = a.getAttribute('epub:type') || a.getAttribute('type') || ''; if ((a.tagName === 'SUP' || href.startsWith('#') || /note/i.test(typ)) && /^\s*[\[\(]?\d{1,3}[\]\)]?\s*$/.test(a.textContent)) a.remove(); });
   const title = (doc.querySelector('title')?.textContent || doc.querySelector('meta[property="og:title"]')?.content || '').replace(/\s+/g, ' ').trim() || fallbackTitle;
   const lang = (doc.documentElement.getAttribute('lang') || '').split('-')[0];
   const body = doc.body || doc.documentElement;
@@ -131,7 +132,7 @@ export function parseFB2(u8, name) {
   if (!body) throw new ImportError('empty', 'FB2');
   const items = [];
   // footnote references ([52]) are not part of a title
-  const txt = el => { const c = el.cloneNode(true); [...c.getElementsByTagName('a')].forEach(a => { if (/note/i.test(a.getAttribute('type') || '') || /^\s*[\[\(]?\d{1,3}[\]\)]?\s*$/.test(a.textContent)) a.remove(); }); return c.textContent.replace(/\s+/g, ' ').trim(); };
+  const txt = el => { const c = el.cloneNode(true); [...c.querySelectorAll('a,sup')].forEach(a => { const typ = a.getAttribute('type') || '', href = a.getAttribute('l:href') || a.getAttribute('href') || a.getAttribute('xlink:href') || ''; if (/note/i.test(typ) || /note/i.test(href) || /^\s*[\[\(]?\d{1,3}[\]\)]?\s*$/.test(a.textContent)) a.remove(); }); return c.textContent.replace(/\s+/g, ' ').trim(); };
   const lines = el => { const ps = [...el.children].filter(c => /^(p|subtitle)$/.test(c.localName || c.tagName.toLowerCase())); return ps.length ? ps.map(txt) : [txt(el)]; };
   // nesting: body > section (depth 1) > section (depth 2)…; a section's <title> is a heading at its depth,
   // a <subtitle> is a subsection inside it; untitled sections simply continue the text

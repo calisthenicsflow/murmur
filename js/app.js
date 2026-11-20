@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.3.2';
+import { db } from './db.js?v=1.3.3';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.2';
-import { coverSVG, autoCover } from './covers.js?v=1.3.2';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.3.2';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.2';
-import { Player } from './player.js?v=1.3.2';
-import { translateMany } from './translate.js?v=1.3.2';
-import { track, summary } from './stats.js?v=1.3.2';
-import { renderCard, shareCard } from './quotes.js?v=1.3.2';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.2';
-import { SAMPLES } from './samples.js?v=1.3.2';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.3';
+import { coverSVG, autoCover } from './covers.js?v=1.3.3';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.3.3';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.3';
+import { Player } from './player.js?v=1.3.3';
+import { translateMany } from './translate.js?v=1.3.3';
+import { track, summary } from './stats.js?v=1.3.3';
+import { renderCard, shareCard } from './quotes.js?v=1.3.3';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.3';
+import { SAMPLES } from './samples.js?v=1.3.3';
 
-export const APP_VERSION = '1.3.2';
+export const APP_VERSION = '1.3.3';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -422,7 +422,13 @@ function secHtml(i) {
     html += `<p class="${dc ? 'first' : ''}${p.skip ? ' skip' : ''}">`;
     const firstW = sents[p.sents[0]].words[0];
     for (const s of p.sents) {
-      html += `<span class="s" data-s="${s}">` + sents[s].words.map(w => `<span class="w${dc && w === firstW ? ' dcw' : ''}${words[w].say ? '' : ' sk'}${/^\(?(https?:|www\.)/i.test(words[w].t) ? ' u' : ''}" data-w="${w}">${esc(words[w].t)}</span>`).map((h, k) => h + (words[sents[s].words[k]].ns ? '' : ' ')).join('').trimEnd() + '</span>';
+      html += `<span class="s" data-s="${s}">` + sents[s].words.map(w => {
+        const wd = words[w], foot = !wd.say && /(?:\d|[¹²³⁴⁵⁶⁷⁸⁹⁰]|\[\d|\(\d|\{\d|\*|†|‡)/.test(wd.t);
+        const cls = `w${dc && w === firstW ? ' dcw' : ''}${!wd.say ? (foot ? ' fn' : ' sk') : ''}${/^\(?(https?:|www\.)/i.test(wd.t) ? ' u' : ''}`;
+        let inner = esc(wd.t);
+        if (wd.say && wd.say !== wd.t && wd.t.startsWith(wd.say)) inner = esc(wd.say) + `<sup class="fn">${esc(wd.t.slice(wd.say.length))}</sup>`;
+        return `<span class="${cls}" data-w="${w}">${inner}</span>`;
+      }).map((h, k) => h + (words[sents[s].words[k]].ns ? '' : ' ')).join('').trimEnd() + '</span>';
       // the placeholder already takes about the room the translation will take, so its arrival barely moves the text
       const ph = tr[s] ? '' : ` style="min-height:${(Math.max(1, Math.ceil(sents[s].text.length * 0.95 / trCpl())) * 1.5).toFixed(1)}em"`;
       html += `<span class="tr${tr[s] ? '' : ' load'}"${ph} data-t="${s}" dir="auto" lang="${biOn() ? biTarget() : ''}">${tr[s] ? trHtml(tr[s]) : '·'}</span> `;
@@ -604,13 +610,43 @@ function setCurrent(w, fromPlayer) {
 // return a box spanning the whole drop cap), so measure the text after the first letter with a Range.
 function wordRect(el) {
   if (el.classList.contains('dcw') && getComputedStyle(el.closest('p'), '::first-letter').float !== 'none') { // only a floated cap (not bilingual / big type)
-    const tn = el.firstChild;
-    if (tn && tn.nodeType === 3 && tn.length > 1) {
+    const tn = [...el.childNodes].find(n => n.nodeType === 3 && n.length > 1);
+    if (tn) {
       const rg = document.createRange(); rg.setStart(tn, 1); rg.setEnd(tn, tn.length);
       const rs = rg.getClientRects(); if (rs.length) return { rects: rs, box: rg.getBoundingClientRect() };
     }
   }
+  // a trailing footnote <sup> would stretch the line box; measure the spoken text node alone
+  const tn = [...el.childNodes].find(n => n.nodeType === 3 && n.data.trim());
+  if (tn && el.querySelector('sup.fn')) {
+    const rg = document.createRange(); rg.selectNodeContents(tn);
+    const rs = rg.getClientRects(); if (rs.length) return { rects: rs, box: rg.getBoundingClientRect() };
+  }
   return { rects: el.getClientRects(), box: el.getBoundingClientRect() };
+}
+/** ink box of a word: typographic ascent/descent around the baseline, plus equal padding. */
+function glyphBox(el, box) {
+  const cs = getComputedStyle(el), font = cs.font, fs = parseFloat(cs.fontSize) || 18;
+  const canvas = glyphBox._c || (glyphBox._c = document.createElement('canvas'));
+  const ctx = canvas.getContext('2d');
+  const sample = ((el.textContent || 'Hg').replace(/\s+/g, '') || 'Hg').slice(0, 48);
+  const key = font + '\0' + sample;
+  let m = glyphBox._m?.get(key);
+  if (!m) {
+    ctx.font = font;
+    const mt = ctx.measureText(sample);
+    m = { asc: mt.actualBoundingBoxAscent || fs * 0.7, desc: mt.actualBoundingBoxDescent || fs * 0.2,
+          fAsc: mt.fontBoundingBoxAscent, fDesc: mt.fontBoundingBoxDescent };
+    (glyphBox._m || (glyphBox._m = new Map())).set(key, m);
+    if (glyphBox._m.size > 80) glyphBox._m.clear();
+  }
+  const lhRaw = parseFloat(cs.lineHeight);
+  const fontH = (Number.isFinite(m.fAsc) && Number.isFinite(m.fDesc)) ? m.fAsc + m.fDesc : fs;
+  const lineH = Number.isFinite(lhRaw) ? lhRaw : fontH;
+  const baseline = box.top + Math.max(0, (box.height - fontH) / 2) + (Number.isFinite(m.fAsc) ? m.fAsc : fs * 0.8);
+  const pad = Math.max(2.5, fs * 0.14);
+  const top = baseline - m.asc - pad, bottom = baseline + m.desc + pad;
+  return { left: box.left, top, width: box.width, height: Math.max(fs * 0.7, bottom - top), pad, fs };
 }
 let hlLast = null; // last placement, relative to #rdText: {x, y, w, h, el}
 function positionHL(instant) {
@@ -621,13 +657,14 @@ function positionHL(instant) {
   // a word broken across two lines (hyphenation) would make one huge box over both lines:
   // paint that word inline instead and park the floating box
   $$('#rdText .split').forEach(x => x !== el && x.classList.remove('split'));
-  const { rects, box: r } = wordRect(el);
+  const { rects, box: r0 } = wordRect(el);
   if (rects.length > 1) { el.classList.add('split'); hl.classList.remove('on'); hlLast = null; return; }
   el.classList.remove('split');
-  if (!r.width && !r.height) return; // not laid out (hidden / detached) — the watchdog retries
+  if (!r0.width && !r0.height) return; // not laid out (hidden / detached) — the watchdog retries
+  const r = el.classList.contains('dcw') ? r0 : glyphBox(el, r0);
   // the box lives in the scroller (not in the text), so it works the same for the vertical flow and for pages
   const sc = $('#rdScroll'), sr = sc.getBoundingClientRect();
-  const x = r.left - sr.left + sc.scrollLeft - 3, y = r.top - sr.top + sc.scrollTop - 1, w = r.width + 6, h = r.height + 2;
+  const x = r.left - sr.left + sc.scrollLeft - 3, y = r.top - sr.top + sc.scrollTop, w = r.width + 6, h = r.height;
   if (hlLast && hlLast.el === el && Math.abs(hlLast.x - x) < .5 && Math.abs(hlLast.y - y) < .5 && Math.abs(hlLast.w - w) < .5 && Math.abs(hlLast.h - h) < .5 && hl.classList.contains('on')) return;
   // gliding is only for the next word on the same line; moving to another line (or out of a
   // hidden state, or after a reflow of the same word) jumps, so the box never travels diagonally
@@ -644,7 +681,7 @@ function positionHL(instant) {
 // Cyrillic drop-cap face, controls hiding, OCR pages arriving, size animations) would leave the
 // box behind; while the highlight is live, re-check the word's position a few times a second.
 setInterval(() => { if (S.screen === 'reader' && S.mode === 'listen' && (player.playing || player.paused) && !document.hidden) positionHL(); }, 200);
-function setMode(...a) { const r = setMode_(...a); if (prefs.pages) setTimeout(layoutPages, 420); return r; }
+function setMode(...a) { return setMode_(...a); }
 /* ------------------------------ scrolling & pages ------------------------------ */
 const pageW = () => $('#rdScroll').clientWidth || innerWidth;
 function pageInfo() { const sc = $('#rdScroll'), pw = pageW(); return { i: Math.round(sc.scrollLeft / pw), n: Math.max(1, Math.round(($('#rdFlow').scrollWidth) / pw)), pw }; }
@@ -661,10 +698,9 @@ function layoutPages() {
   const sc = $('#rdScroll'); sc.scrollTop = 0;
   const pwChanged = S.lastPw !== pageW(); S.lastPw = pageW();
   sc.style.setProperty('--pw', pageW() + 'px');
-  // the page ends above whatever bars are showing (player in Listen, dock in Read; nothing when hidden)
-  const sr = sc.getBoundingClientRect(); let bottom = sr.bottom - 26;
-  if (!prefs.bare) for (const id of ['#player', '#dock']) { const el = $(id), r = el.getBoundingClientRect(); if (r.height && getComputedStyle(el).opacity !== '0' && (id !== '#player' || el.classList.contains('show'))) bottom = Math.min(bottom, r.top - 14); }
-  sc.style.setProperty('--pg-b', Math.max(40, sr.bottom - bottom) + 'px');
+  // the column height is constant: dock / player overlay the page (with .rd-fade) so showing
+  // or hiding the controls never shifts the text
+  sc.style.setProperty('--pg-b', 'calc(24px + var(--safe-b))');
   const el = S.wordEls[S.curW]; if (el && (pwChanged || player.playing || player.paused) && !(S.pgAt && Date.now() - S.pgAt < 450)) { const p = pageOfEl(el); if (p !== pageInfo().i) pageTo(p, false); }
   updateProgress();
 }
@@ -706,7 +742,7 @@ $('#recenter').onclick = () => { S.lastUserScroll = 0; $('#recenter').classList.
 $('#rdScroll').addEventListener('touchstart', () => { S.touching = true; }, { passive: true });
 ['touchend', 'touchcancel'].forEach(ev => $('#rdScroll').addEventListener(ev, () => { S.touching = false; S.lastUserScroll = Date.now(); }, { passive: true }));
 $('#rdScroll').addEventListener('scroll', () => {
-  hidePop();
+  if (S.selecting || S.selDragging) positionHandles(); else hidePop();
   if (prefs.pages && $('#rdScroll').scrollTop) $('#rdScroll').scrollTop = 0; // pages never scroll vertically (scrollIntoView, focus…)
   // only the reader's own scrolling moves the reading place (not our jumps / auto-follow)
   if (S.mode === 'read' && !player.playing && Date.now() - (S.progScroll || 0) > 900) readPosSoon();
@@ -723,6 +759,7 @@ const updateProgressSoon = debounce(() => updateProgress(), 100);
   sc.addEventListener('touchstart', e => { if (!prefs.pages) return; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); }, { passive: true });
   sc.addEventListener('touchend', e => {
     if (!prefs.pages || x0 === null) return; const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0; x0 = null;
+    if (S.selecting || S.selDragging || Date.now() - (S.suppressTap || 0) < 600) return;
     if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2 || Date.now() - t0 > 900) return;
     turnPage(dx < 0 ? 1 : -1); S.swiped = Date.now();
   });
@@ -840,14 +877,14 @@ function setBare(on, save = true) {
   $('#reader').classList.toggle('bare', prefs.bare);
   const b = $('#rdChrome'); b.setAttribute('aria-pressed', prefs.bare); b.setAttribute('aria-label', prefs.bare ? t('showControls') : t('hideControls'));
   if (prefs.bare) hidePop();
-  if (prefs.pages) setTimeout(layoutPages, 480); // the page grows / shrinks with the bars
 }
 $('#rdChrome').onclick = e => { e.stopPropagation(); setBare(!prefs.bare); hint('bare'); };
 // tap on an empty part of the page toggles the controls; taps on words keep seeking / opening the popover
 let tapSel = '';
 $('#rdScroll').addEventListener('pointerdown', () => { tapSel = String(getSelection() || ''); });
 $('#rdScroll').addEventListener('click', e => {
-  if (e.target.closest('.w, .tw, button, a, input, select, #rdNext, .tronly .tr')) return;
+  if (Date.now() - (S.suppressTap || 0) < 600) { e.preventDefault(); e.stopPropagation(); return; }
+  if (e.target.closest('.w, .tw, button, a, input, select, #rdNext, .tronly .tr, .sel-handle')) return;
   if ($('#pop').classList.contains('show')) return hidePop();
   if (tapSel || String(getSelection() || '')) return;
   setBare(!prefs.bare);
@@ -862,6 +899,7 @@ function hint(k, msg) {
 
 /* tap on text */
 $('#rdText').addEventListener('click', e => {
+  if (Date.now() - (S.suppressTap || 0) < 600) { e.preventDefault(); e.stopPropagation(); return; }
   const trl = trOnly() && e.target.closest('.tr[data-t]');
   if (trl && S.mode === 'listen') { const s0 = +trl.dataset.t; unlockAudio(); S.lastUserScroll = 0; startPlayback(S.model.sents[s0].words[0]); return; }
   const w = e.target.closest('.w'); if (!w) return;
@@ -871,39 +909,133 @@ $('#rdText').addEventListener('click', e => {
   showPop(+w.closest('.s').dataset.s, w);
 });
 
-/* ------------------------------ popover ------------------------------ */
-function showPop(s, anchor) {
+/* ------------------------------ popover & multi-sentence selection ------------------------------ */
+function rangeText(a, b) { return S.model.sents.slice(a, b + 1).map(s => s.text.trim()).join(' '); }
+function shareBody(text) {
+  const author = (S.book?.author || '').trim(), title = (S.book?.title || 'Murmur').trim();
+  return `${text}\n\n— ${[author, title].filter(Boolean).join(', ')}`;
+}
+async function shareSelection(text) {
+  const body = shareBody(text);
+  try { if (navigator.share) { await navigator.share({ text: body }); return 'shared'; } }
+  catch (e) { if (e && e.name === 'AbortError') return 'abort'; }
+  try { await navigator.clipboard.writeText(body); toast(t('copied')); return 'copied'; }
+  catch { toast('✕'); return 'fail'; }
+}
+function applySel(a, b) {
+  if (a > b) [a, b] = [b, a];
+  S.selRange = { a, b };
+  $$('#rdText .s.sel').forEach(x => x.classList.remove('sel'));
+  for (let i = a; i <= b; i++) S.sentEls[i]?.classList.add('sel');
+  positionHandles();
+}
+function positionHandles() {
+  const a = $('#selA'), b = $('#selB'), r = S.selRange;
+  if (!a || !b) return;
+  if (!r || !$('#pop').classList.contains('show')) { a.classList.remove('on'); b.classList.remove('on'); a.hidden = true; b.hidden = true; return; }
+  const sc = $('#rdScroll'), sr = sc.getBoundingClientRect(), size = 22;
+  const place = (el, sent, end) => {
+    const node = S.sentEls[sent]; if (!node || !node.isConnected) { el.classList.remove('on'); el.hidden = true; return; }
+    const recs = node.getClientRects(); if (!recs.length) { el.classList.remove('on'); el.hidden = true; return; }
+    const box = end ? recs[recs.length - 1] : recs[0];
+    el.style.transform = `translate(${(end ? box.right : box.left) - sr.left + sc.scrollLeft - size / 2}px, ${(end ? box.bottom : box.top) - sr.top + sc.scrollTop - size / 2}px)`;
+    el.hidden = false; el.classList.add('on');
+  };
+  place(a, r.a, false); place(b, r.b, true);
+}
+function showPop(s, anchor, endS = s) {
+  const a = Math.min(s, endS), b = Math.max(s, endS);
+  applySel(a, b);
   const pop = $('#pop');
-  $$('.s.sel').forEach(x => x.classList.remove('sel'));
-  S.sentEls[s]?.classList.add('sel');
   pop.innerHTML = `<div class="trbox" id="popTr"></div>
     <button data-a="listen">${ICON.headph}<span>${t('listenFrom')}</span></button>
     <button data-a="quote">${ICON.quote}<span>${t('saveQuote')}</span></button>
+    <button data-a="share">${ICON.share}<span>${t('shareAction')}</span></button>
     <button data-a="copy">${ICON.copy}<span>${t('copy')}</span></button>
     <button data-a="tr">${ICON.tr}<span>${t('translate')}</span></button><i class="ptr"></i>`;
-  const r = anchor.getBoundingClientRect(); pop.classList.remove('below');
+  const r = (anchor || S.sentEls[a]).getBoundingClientRect(); pop.classList.remove('below');
   pop.style.left = '0px'; pop.style.top = '0px'; pop.classList.add('show');
   const pw = pop.offsetWidth, ph = pop.offsetHeight, vw = innerWidth;
   let x = Math.min(vw - pw - 10, Math.max(10, r.left + r.width / 2 - pw / 2)), y = r.top - ph - 12;
   if (y < 70) { y = r.bottom + 12; pop.classList.add('below'); }
   pop.style.left = x + 'px'; pop.style.top = y + 'px';
   pop.querySelector('.ptr').style.left = Math.min(pw - 20, Math.max(8, r.left + r.width / 2 - x - 6)) + 'px';
-  const text = S.model.sents[s].text;
-  pop.onclick = async e => {
-    const b = e.target.closest('button'); if (!b) return;
-    const a = b.dataset.a;
-    if (a === 'listen') { hidePop(); unlockAudio(); setMode('listen'); startPlayback(S.model.sents[s].words[0]); }
-    if (a === 'quote') { await saveQuote(text); hidePop(); toast(t('quoteSaved')); }
-    if (a === 'copy') { try { await navigator.clipboard.writeText(text); toast(t('copied')); } catch { toast('✕'); } hidePop(); }
-    if (a === 'tr') {
+  positionHandles();
+  const text = rangeText(a, b);
+  pop.onclick = async ev => {
+    const btn = ev.target.closest('button'); if (!btn) return;
+    const act = btn.dataset.a;
+    if (act === 'listen') { hidePop(); unlockAudio(); setMode('listen'); startPlayback(S.model.sents[a].words[0]); }
+    if (act === 'quote') { await saveQuote(text); hidePop(); toast(t('quoteSaved')); }
+    if (act === 'share') { const r = await shareSelection(text); if (r !== 'abort') hidePop(); }
+    if (act === 'copy') { try { await navigator.clipboard.writeText(text); toast(t('copied')); } catch { toast('✕'); } hidePop(); }
+    if (act === 'tr') {
       const box = pop.querySelector('#popTr'); box.textContent = t('translating'); box.classList.add('show');
       const to = biTarget(); const [tx] = await translateMany([text], S.book.lang, to).catch(() => [null]);
       box.textContent = tx || t('translationFail');
     }
   };
 }
-function hidePop() { $('#pop').classList.remove('show'); $$('.s.sel').forEach(x => x.classList.remove('sel')); }
-document.addEventListener('click', e => { if (!e.target.closest('#pop') && !e.target.closest('#rdText')) hidePop(); });
+function hidePop() {
+  $('#pop').classList.remove('show');
+  $$('.s.sel').forEach(x => x.classList.remove('sel'));
+  S.selRange = null;
+  ['#selA', '#selB'].forEach(id => { const el = $(id); if (el) { el.hidden = true; el.classList.remove('on'); } });
+}
+document.addEventListener('click', e => { if (!e.target.closest('#pop') && !e.target.closest('#rdText') && !e.target.closest('.sel-handle')) hidePop(); });
+
+// long-press a sentence, then drag to extend by whole sentences; handles at the ends adjust the range
+(() => {
+  const sc = $('#rdScroll');
+  let timer = 0, x0 = 0, y0 = 0, s0 = -1, armed = false, pid = 0;
+  const sentAt = (x, y) => { const n = document.elementFromPoint(x, y)?.closest?.('#rdText .s'); return n ? +n.dataset.s : -1; };
+  const clear = () => { if (timer) { clearTimeout(timer); timer = 0; } };
+  const arm = (s, el) => { armed = true; S.selecting = true; S.suppressTap = Date.now(); try { navigator.vibrate?.(8); } catch {} showPop(s, el, s); };
+  const onMove = e => {
+    if (pid && e.pointerId !== pid) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    if (timer && Math.hypot(dx, dy) > 8) { clear(); return; } // scroll or page swipe — not a selection
+    if (!armed) return;
+    S.suppressTap = Date.now();
+    const s = sentAt(e.clientX, e.clientY); if (s >= 0) showPop(s0, S.sentEls[s] || S.sentEls[s0], s);
+  };
+  const onUp = e => {
+    if (pid && e.pointerId !== pid) return;
+    if (armed) S.suppressTap = Date.now();
+    clear(); armed = false; pid = 0; S.selecting = !!S.selDragging;
+  };
+  sc.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target.closest?.('.sel-handle, button, a, input, select, #pop')) return;
+    const sEl = (e.target.nodeType === 3 ? e.target.parentElement : e.target)?.closest?.('#rdText .s');
+    if (!sEl) { clear(); return; }
+    x0 = e.clientX; y0 = e.clientY; s0 = +sEl.dataset.s; armed = false; pid = e.pointerId; clear();
+    try { sc.setPointerCapture(e.pointerId); } catch {}
+    timer = setTimeout(() => { timer = 0; arm(s0, sEl); }, 450);
+  });
+  // document-level so a drag past the sentence / a missed capture still extends the range
+  document.addEventListener('pointermove', onMove, { passive: true });
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', e => { if (!armed) onUp(e); else { clear(); /* keep the selection, just end the drag */ armed = false; pid = 0; S.suppressTap = Date.now(); } });
+  sc.addEventListener('touchmove', e => { if (armed || S.selDragging) e.preventDefault(); }, { passive: false });
+  const wire = (el, which) => {
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault(); e.stopPropagation();
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      S.selDragging = which; S.selecting = true; S.suppressTap = Date.now();
+    });
+    document.addEventListener('pointermove', e => {
+      if (S.selDragging !== which || !S.selRange) return;
+      const s = sentAt(e.clientX, e.clientY); if (s < 0) return;
+      const a = which === 'a' ? s : S.selRange.a, b = which === 'b' ? s : S.selRange.b;
+      showPop(a, S.sentEls[Math.max(a, b)] || S.sentEls[a], b);
+    });
+    const end = () => { if (S.selDragging !== which) return; S.selDragging = null; S.selecting = false; S.suppressTap = Date.now(); };
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+  };
+  wire($('#selA'), 'a'); wire($('#selB'), 'b');
+})();
 
 /* ------------------------------ modes & playback ------------------------------ */
 function setMode_(m, silent) {
@@ -1177,10 +1309,10 @@ function openNav(tab = 'toc') {
       <input type="range" id="navSeek" min="0" max="1000" step="1" value="${Math.round(bp.f * 1000)}" style="--p:${(bp.f * 100).toFixed(1)}%" aria-label="${t('position')}">
       <div class="nav-meta"><span id="navPrev">${esc(t('youAreHere'))}</span><span id="navLeft">${fmtLeft(bp.left)} ${t('left')}</span></div>
     </div>
-    <div class="segs" id="navTabs"><button data-t="toc">${t('contents')}</button><button data-t="marks">${t('bookmarks')}${(b.marks || []).length ? ` · ${b.marks.length}` : ''}</button></div></div>
+    <div class="segs" id="navTabs"><button data-t="toc">${t('contents')}</button><button data-t="marks">${t('bookmarks')}${(b.marks || []).length ? ` · ${b.marks.length}` : ''}</button><button data-t="quotes">${t('quotes')}</button></div></div>
     <div id="navList"></div>`, body => {
     const list = body.querySelector('#navList');
-    const paint = tb => {
+    const paint = async tb => {
       tab = tb; body.querySelectorAll('#navTabs button').forEach(x => x.classList.toggle('on', x.dataset.t === tb));
       if (tb === 'toc') {
         // the book's own Contents: parts and chapters strong, subsections lighter and indented
@@ -1200,11 +1332,24 @@ function openNav(tab = 'toc') {
           cur.style.scrollMarginTop = ((head ? head.offsetHeight : 0) + 8) + 'px';
           cur.scrollIntoView({ block: 'nearest' });
         });
-      } else {
+      } else if (tb === 'marks') {
         const marks = b.marks || [], here = curMark() >= 0;
         list.innerHTML = `<button class="nav-add" id="navAdd">${ICON.mark}<span>${here ? t('bookmarkHereDone') : t('bookmarkHere')}</span></button>` + (marks.map((m, i) => `<div class="mk" data-mark="${i}"><div class="row mk-main"><div class="ic">${ICON.mark}</div><div class="tx"><b>${esc(m.text)}</b><small>${esc(secName(b.sections[m.sec] || {}, m.sec))} · ${fmtPct(m.f != null ? m.f : bookProg(m.sec, 0).f)}</small></div></div><button class="mk-del" aria-label="${t('delete')}">${ICON.x}<span>${t('delete')}</span></button></div>`).join('') || `<div class="note nav-empty">${t('noBookmarks')}</div>`);
         list.querySelector('#navAdd').onclick = () => { if (curMark() < 0) { addMark(); toast(t('bookmarkAdded')); } paint('marks'); body.querySelector('#navTabs [data-t=marks]').textContent = t('bookmarks') + ` · ${b.marks.length}`; };
         list.querySelectorAll('.mk').forEach(el => wireMark(el, () => paint('marks')));
+      } else if (tb === 'quotes') {
+        const qs = (await db.all('quotes')).filter(q => q.bookId === b.id).sort((x, y) => y.at - x.at);
+        list.innerHTML = (qs.map((q, i) => `<div class="mk q-nav" data-q="${q.id}"><div class="row mk-main"><div class="ic">${ICON.quote}</div><div class="tx"><b>${esc(q.text)}</b><small>${esc([q.author, q.title].filter(Boolean).join(' · '))}</small></div></div><button class="mk-del q-share" data-a="share" aria-label="${t('shareAction')}">${ICON.share}<span>${t('shareAction')}</span></button><button class="mk-del" data-a="del" aria-label="${t('delete')}">${ICON.x}<span>${t('delete')}</span></button></div>`).join('') || `<div class="note nav-empty">${t('noQuotesBook')}</div>`) + `<button class="nav-add" id="navAllQuotes">${ICON.quote}<span>${t('quotes')}</span></button>`;
+        list.querySelector('#navAllQuotes').onclick = () => { closeSheet(); renderQuotes(); show('quotes'); };
+        list.querySelectorAll('.q-nav').forEach(el => {
+          el.querySelector('.mk-main').onclick = () => {};
+          el.querySelectorAll('[data-a]').forEach(btn => btn.onclick = async ev => {
+            ev.stopPropagation();
+            const q = qs.find(x => x.id === el.dataset.q); if (!q) return;
+            if (btn.dataset.a === 'share') { const r = await shareCard(q, q.th || 'paper'); if (r === 'downloaded') toast('PNG ✓'); }
+            if (btn.dataset.a === 'del') { await db.del('quotes', q.id); paint('quotes'); }
+          });
+        });
       }
     };
     body.querySelector('#navTabs').onclick = e => { const x = e.target.closest('button'); if (x) paint(x.dataset.t); };
@@ -1513,14 +1658,31 @@ setInterval(() => {
 document.addEventListener('touchstart', () => { S.lastInteract = Date.now(); }, { passive: true });
 
 /* ------------------------------ media session ------------------------------ */
+function mediaArtwork() {
+  // the approved Murmur cat icon — never the book cover. Absolute URLs so iOS Now Playing can fetch them.
+  return [96, 128, 192, 256, 384, 512].map(s => ({ src: new URL(`icons/icon-${s}.png`, location.href).href, sizes: `${s}x${s}`, type: 'image/png' }));
+}
 function updateMediaSession() {
   if (!('mediaSession' in navigator) || !S.book) return;
   try {
-    navigator.mediaSession.metadata = new MediaMetadata({ title: chapterName(), artist: S.book.author || 'Murmur', album: S.book.title, artwork: [{ src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }] });
-    navigator.mediaSession.setActionHandler('play', () => player.resume());
-    navigator.mediaSession.setActionHandler('pause', () => player.pause());
-    navigator.mediaSession.setActionHandler('previoustrack', () => player.skip(-1));
-    navigator.mediaSession.setActionHandler('nexttrack', () => player.skip(1));
+    const chapter = chapterName() || '';
+    const sent = S.model?.sents?.[S.model?.words?.[S.curW]?.s]?.text || '';
+    const title = chapter || (sent.replace(/\s+/g, ' ').trim().slice(0, 80) || 'Murmur');
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title,
+      artist: S.book.author || 'Murmur',
+      album: S.book.title || 'Murmur',
+      artwork: mediaArtwork()
+    });
+    const bind = (name, fn) => { try { navigator.mediaSession.setActionHandler(name, fn); } catch {} };
+    bind('play', () => { player.paused ? player.resume() : startPlayback(Math.max(0, S.curW)); });
+    bind('pause', () => player.pause());
+    bind('previoustrack', () => player.skip(-1));
+    bind('nexttrack', () => player.skip(1));
+    bind('seekbackward', () => player.skip(-1));
+    bind('seekforward', () => player.skip(1));
+    bind('stop', () => player.stop());
+    navigator.mediaSession.playbackState = player.playing ? 'playing' : player.paused ? 'paused' : 'none';
   } catch {}
 }
 
@@ -1581,5 +1743,5 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, positionHL, showPop };
+window.murmur = { S, prefs, player, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, positionHL, showPop, hidePop, updateMediaSession, mediaArtwork, layoutPages, glyphBox, shareSelection, buildModel };
 boot();
