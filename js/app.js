@@ -1,17 +1,17 @@
-import { db } from './db.js?v=1.3.1';
+import { db } from './db.js?v=1.3.2';
 import { t, uiLang, setUiLang, plural } from './i18n.js';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.1';
-import { coverSVG, autoCover } from './covers.js?v=1.3.1';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.3.1';
-import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.1';
-import { Player } from './player.js?v=1.3.1';
-import { translateMany } from './translate.js?v=1.3.1';
-import { track, summary } from './stats.js?v=1.3.1';
-import { renderCard, shareCard } from './quotes.js?v=1.3.1';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.1';
-import { SAMPLES } from './samples.js?v=1.3.1';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.3.2';
+import { coverSVG, autoCover } from './covers.js?v=1.3.2';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT } from './engines.js?v=1.3.2';
+import { CURATED, PREVIEW_TEXT } from './voices.js?v=1.3.2';
+import { Player } from './player.js?v=1.3.2';
+import { translateMany } from './translate.js?v=1.3.2';
+import { track, summary } from './stats.js?v=1.3.2';
+import { renderCard, shareCard } from './quotes.js?v=1.3.2';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.3.2';
+import { SAMPLES } from './samples.js?v=1.3.2';
 
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.3.2';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -1171,13 +1171,13 @@ $('#rdNav').onclick = () => openNav();
 function openNav(tab = 'toc') {
   const b = S.book; if (!b) return;
   const bp = bookProg(), sec = b.sections[S.sec];
-  openSheet(`<div class="sh-title nav-title">${esc(b.title)}<button class="x" data-close>${ICON.x}</button></div>
+  openSheet(`<div class="nav-head"><div class="sh-title nav-title">${esc(b.title)}<button class="x" data-close>${ICON.x}</button></div>
     <div class="nav-pos">
       <div class="nav-cur"><b id="navCh">${esc(chapterName(S.sec, curPara()))}</b><span id="navPct">${fmtPct(bp.f)}</span></div>
       <input type="range" id="navSeek" min="0" max="1000" step="1" value="${Math.round(bp.f * 1000)}" style="--p:${(bp.f * 100).toFixed(1)}%" aria-label="${t('position')}">
       <div class="nav-meta"><span id="navPrev">${esc(t('youAreHere'))}</span><span id="navLeft">${fmtLeft(bp.left)} ${t('left')}</span></div>
     </div>
-    <div class="segs" id="navTabs"><button data-t="toc">${t('contents')}</button><button data-t="marks">${t('bookmarks')}${(b.marks || []).length ? ` · ${b.marks.length}` : ''}</button></div>
+    <div class="segs" id="navTabs"><button data-t="toc">${t('contents')}</button><button data-t="marks">${t('bookmarks')}${(b.marks || []).length ? ` · ${b.marks.length}` : ''}</button></div></div>
     <div id="navList"></div>`, body => {
     const list = body.querySelector('#navList');
     const paint = tb => {
@@ -1191,7 +1191,15 @@ function openNav(tab = 'toc') {
         const pf = e => { const ps = (b.sections[e.sec].text || '').split(/\n\s*\n/), all = ps.reduce((a, x) => a + x.length, 0) || 1, pre = ps.slice(0, e.p).reduce((a, x) => a + x.length, 0); return (before[e.sec] + sw[e.sec] * pre / all) / tot; };
         list.innerHTML = toc.length ? `<div class="toc">` + toc.map((e, k) => `<button class="nav-row toc-row l${Math.min(2, e.lvl)}${k === cur ? ' cur' : ''}" data-k="${k}"><span class="tt">${esc(e.t)}</span><small>${k === cur ? `<em>${t('youAreHere')}</em> · ` : ''}${fmtPct(pf(e))}</small></button>`).join('') + '</div>' : `<div class="note nav-empty">${t('noToc')}</div>`;
         list.querySelectorAll('[data-k]').forEach(r => r.onclick = () => { const e = toc[+r.dataset.k]; closeSheet(); jumpTo(e.sec, 0, paraWord(e.sec, e.p)); });
-        requestAnimationFrame(() => list.querySelector('.toc-row.cur')?.scrollIntoView({ block: 'center' }));
+        requestAnimationFrame(() => {
+          const cur = list.querySelector('.toc-row.cur'), head = body.querySelector('.nav-head');
+          if (!cur) return;
+          const cr = cur.getBoundingClientRect(), br = body.getBoundingClientRect();
+          const top = (head ? head.getBoundingClientRect().bottom : br.top) + 8;
+          if (cr.top >= top && cr.bottom <= br.bottom - 8) return; // already in the visible list
+          cur.style.scrollMarginTop = ((head ? head.offsetHeight : 0) + 8) + 'px';
+          cur.scrollIntoView({ block: 'nearest' });
+        });
       } else {
         const marks = b.marks || [], here = curMark() >= 0;
         list.innerHTML = `<button class="nav-add" id="navAdd">${ICON.mark}<span>${here ? t('bookmarkHereDone') : t('bookmarkHere')}</span></button>` + (marks.map((m, i) => `<div class="mk" data-mark="${i}"><div class="row mk-main"><div class="ic">${ICON.mark}</div><div class="tx"><b>${esc(m.text)}</b><small>${esc(secName(b.sections[m.sec] || {}, m.sec))} · ${fmtPct(m.f != null ? m.f : bookProg(m.sec, 0).f)}</small></div></div><button class="mk-del" aria-label="${t('delete')}">${ICON.x}<span>${t('delete')}</span></button></div>`).join('') || `<div class="note nav-empty">${t('noBookmarks')}</div>`);
