@@ -36,6 +36,15 @@ const D = {
     timerDone: 'Таймер сна сработал', alignment: 'Выравнивание', justify: 'По ширине', alignLeft: 'По левому краю', textLang: 'Язык текста', autoDetected: 'определён автоматически', thisText: 'этот текст', translationLang: 'перевод', multilingual: 'многоязычный', preview: 'Прослушать', previewFail: 'Не удалось воспроизвести пример', searchVoices: 'Поиск голоса или языка', neuralSamples: 'книги-примеры уже озвучены; для своих текстов нужен сервер (сейчас офлайн), пока читают голоса телефона.', neuralOffBook: 'Для своих текстов нейроголосам нужен сервер — сейчас читают голоса телефона.', words: 'слов', min: 'мин', sample: 'Пример', cancel: 'Отмена', done: 'Готово', today: 'Сегодня', original: 'Оригинал'
   }
 };
+
+Object.assign(D.en, { continueQ: 'Shall we go on?', libraryT: 'Library', greetMorning: 'Good morning', greetDay: 'Good afternoon', greetEvening: 'Good evening', greetNight: 'Good night',
+  nowPlaying: 'Now playing', fromPlace: 'From where you stopped', leftT: 'left', readingVoice: 'Reading & voice', sentenceN: 'Sentence {a} of {b}', onShort: 'on',
+  translationT: 'Translation', focusT: 'Focus', pagesSide: 'sideways', pagesScroll: 'scroll', orbitTitle: 'Hold the orbit',
+  orbitHint: 'Slide along the arc and let go on what you need. Outer ring — speed, inner — modes.', hintOrbit: '<b>Tip:</b> hold the orange button — speed, voice, sleep timer, translation, focus and pages.' });
+Object.assign(D.ru, { continueQ: 'Продолжим?', libraryT: 'Библиотека', greetMorning: 'Доброе утро', greetDay: 'Добрый день', greetEvening: 'Добрый вечер', greetNight: 'Доброй ночи',
+  nowPlaying: 'Сейчас звучит', fromPlace: 'С места, где остановились', leftT: 'осталось', readingVoice: 'Чтение и озвучка', sentenceN: 'Предложение {a} из {b}', onShort: 'вкл',
+  translationT: 'Перевод', focusT: 'Фокус', pagesSide: 'вбок', pagesScroll: 'лента', orbitTitle: 'Удерживай орбиту',
+  orbitHint: 'Веди палец по дуге и отпусти на нужном. Внешнее кольцо — скорость, внутреннее — режимы.', hintOrbit: '<b>Совет:</b> удерживайте оранжевую кнопку — скорость, голос, таймер сна, перевод, фокус и страницы.' });
 let lang = localStorage.getItem('murmur:ui') || ((navigator.language || 'en').startsWith('ru') ? 'ru' : 'en');
 export const t = k => (D[lang] && D[lang][k]) || D.en[k] || k;
 export const uiLang = () => lang;

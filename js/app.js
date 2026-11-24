@@ -1,19 +1,19 @@
-import { db } from './db.js?v=1.4.2';
-import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.4.2';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.4.2';
-import { coverSVG, autoCover } from './covers.js?v=1.4.2';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.4.2';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.4.2';
-import { Player } from './player.js?v=1.4.2';
-import { translateMany } from './translate.js?v=1.4.2';
-import { track, summary } from './stats.js?v=1.4.2';
-import { renderCard, shareCard } from './quotes.js?v=1.4.2';
-import { openStudio, defaultStyle } from './studio.js?v=1.4.2';
-import { presetById, FORMATS } from './qrender.js?v=1.4.2';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.4.2';
-import { SAMPLES } from './samples.js?v=1.4.2';
+import { db } from './db.js?v=1.5.0';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.5.0';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.5.0';
+import { coverSVG, autoCover } from './covers.js?v=1.5.0';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.5.0';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.5.0';
+import { Player } from './player.js?v=1.5.0';
+import { translateMany } from './translate.js?v=1.5.0';
+import { track, summary } from './stats.js?v=1.5.0';
+import { renderCard, shareCard } from './quotes.js?v=1.5.0';
+import { openStudio, defaultStyle } from './studio.js?v=1.5.0';
+import { presetById, FORMATS } from './qrender.js?v=1.5.0';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.5.0';
+import { SAMPLES } from './samples.js?v=1.5.0';
 
-export const APP_VERSION = '1.4.2';
+export const APP_VERSION = '1.5.0';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -80,8 +80,9 @@ function applyLook() {
   $('#dim').style.opacity = prefs.dim;
   document.body.classList.toggle('align-left', prefs.align === 'left' || prefs.fs >= 28);
   document.body.classList.toggle('big-type', prefs.fs >= 28); // smaller drop cap so long first words still fit beside it // justify makes huge gaps in a narrow column at big sizes
-  const tc = { paper: '#EFEDEA', sepia: '#F2E8D6', night: '#131315' }[prefs.theme];
+  const tc = { paper: '#F4EFE6', sepia: '#EBDDC2', night: '#070707' }[prefs.theme];
   $('meta[name=theme-color]').setAttribute('content', tc);
+  orbitSync();
   requestAnimationFrame(() => { layoutPages(); positionHL(true); });
 }
 
@@ -120,24 +121,49 @@ function bookProgress(b) {
   const n = b.sections.length; const words = wc(b.sections[b.pos.sec]?.text) || 1;
   return Math.min(1, (b.pos.sec + Math.min(1, (b.pos.w || 0) / words)) / n);
 }
+/* flat covers: a solid block, a big two-letter mark and the title (theme picks the six colours) */
+const coverIx = b => { let h = 0; for (const c of String(b.id || b.title)) h = (h * 31 + c.codePointAt(0)) >>> 0; return h % 6; };
+function monogram(title) {
+  const w = String(title || '').replace(/^(the|a|an)\s+/i, '').split(/\s+/).find(x => /[\p{L}\p{N}№]/u.test(x)) || 'M';
+  const ch = [...w.replace(/[^\p{L}\p{N}№]/gu, '')];
+  return (ch[0] || 'M').toUpperCase() + (ch[1] || '').toLowerCase();
+}
+function badgeSVG(p) {
+  if (p >= 0.995) return `<svg class="fbadge done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11"/><path d="M7.5 12.5l3 3L17 9"/></svg>`;
+  if (p <= 0) return '';
+  return `<svg class="fbadge" viewBox="0 0 24 24"><circle class="bg" cx="12" cy="12" r="11.5"/><circle class="tk" cx="12" cy="12" r="9.5"/><circle class="pr" cx="12" cy="12" r="9.5" pathLength="100" stroke-dasharray="${(p * 100).toFixed(1)} 100" transform="rotate(-90 12 12)"/></svg>`;
+}
+function flatCover(b) {
+  const p = bookProgress(b);
+  return `<div class="cv fc fc${coverIx(b)}"><span class="mono">${esc(monogram(b.title))}</span>${badgeSVG(p)}<span class="ct">${esc(b.title || '')}</span>${b.ocr && b.ocr.state !== 'done' ? `<em class="ocr-badge">OCR ${b.ocr.done}/${b.ocr.total}</em>` : ''}</div>`;
+}
+function bookLeftMin(b) { const sw = secWords(b), tot = sw.reduce((a, x) => a + x, 0) || 1; return tot * (1 - bookProgress(b)) / (2.55 * (prefs.rate || 1)) / 60; }
+function greeting() { const h = new Date().getHours(); return t(h < 5 ? 'greetNight' : h < 12 ? 'greetMorning' : h < 18 ? 'greetDay' : 'greetEvening'); }
+function ringSVG(p, size = 126, r = 58, sw = 4) {
+  return `<svg class="fring" viewBox="0 0 ${size} ${size}"><circle class="tk" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-width="${sw}"/><circle class="pr" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-width="${sw}" pathLength="100" stroke-dasharray="${Math.max(0.5, p * 100).toFixed(1)} 100" transform="rotate(-90 ${size / 2} ${size / 2})"/></svg>`;
+}
 function renderLibrary() {
   applyI18n();
   const last = S.books.filter(b => b.openedAt).sort((a, b) => b.openedAt - a.openedAt)[0];
-  $('#continue').innerHTML = last ? `<div class="cont" data-open="${last.id}"><div class="mini">${coverSVG(last)}</div><div class="meta"><div class="k">${t('continue')} · ${Math.round(bookProgress(last) * 100)}%</div><div class="t">${esc(last.title)}</div><div class="pb"><i style="width:${Math.max(3, bookProgress(last) * 100)}%"></i></div></div><button class="go" aria-label="Play">${ICON.play}</button></div>` : '';
+  $('#libGreet').textContent = greeting();
+  $('#libH1').textContent = last ? t('continueQ') : t('libraryT');
+  if (last) {
+    const p = bookProgress(last), sec = Math.min(last.pos?.sec || 0, last.sections.length - 1);
+    const playing = S.book && S.book.id === last.id && player.playing;
+    $('#continue').innerHTML = `<div class="cont hero" data-open="${last.id}">
+      <button class="go hring" aria-label="${t('listen')}">${ringSVG(p)}<span class="orb hcore"><b>${Math.floor(p * 100)}<small>%</small></b></span></button>
+      <div class="meta"><div class="k">● ${t(playing ? 'nowPlaying' : 'continue')}</div><div class="t">${esc(last.title)}</div>${last.author ? `<div class="au">${esc(last.author)}</div>` : ''}
+      <div class="pl">${esc(last.sections.length > 1 ? chapterName(sec, Infinity, last) : t('fromPlace'))}<span>${t('leftT')} ${fmtLeft(bookLeftMin(last)).replace('~', '')}</span></div></div></div>`;
+  } else $('#continue').innerHTML = '';
+  $('#libOrb').classList.toggle('show', !!last);
+  $('#libOrb').dataset.open = last ? last.id : '';
   const groups = SHELVES.map(sh => ({ ...sh, books: S.books.filter(b => (b.shelf || 'mine') === sh.id) })).filter(g => g.books.length || g.id === 'mine');
   $('#shelves').innerHTML = groups.map((g, gi) => `
-    <div class="shelf" style="--g:${g.g};--g2:${g.g2};animation-delay:${.1 + gi * .08}s" data-shelf="${g.id}">
-      <div class="shelf-head"><h2>${esc(shelfName(g.id))}</h2><div class="shelf-nav"><span class="count">${g.books.length} ${plural(g.books.length)}</span><button data-dir="-1" aria-label="Scroll left">${ICON.left}</button><button data-dir="1" aria-label="Scroll right">${ICON.right}</button></div></div>
-      <div class="shelf-row">${g.books.map(b => `<div class="book" data-open="${b.id}" style="height:auto"><div class="cv" style="height:${150 + (parseInt(b.id.replace(/\D/g, '').slice(-2) || '7', 10) % 3) * 7 + (b.sample ? b.title.length % 13 : 0)}px">${coverSVG(b)}${b.sample ? '' : ''}${bookProgress(b) > 0 ? `<i class="prog" style="width:${bookProgress(b) * 100}%"></i>` : ''}${b.ocr && b.ocr.state !== 'done' ? `<em class="ocr-badge">OCR ${b.ocr.done}/${b.ocr.total}</em>` : ''}</div></div>`).join('')}
+    <div class="shelf" style="animation-delay:${.1 + gi * .08}s" data-shelf="${g.id}">
+      <div class="shelf-head"><h2>${esc(shelfName(g.id))}</h2><span class="count">${g.books.length} ${plural(g.books.length)}</span></div>
+      <div class="fgrid">${g.books.map(b => `<div class="book" data-open="${b.id}">${flatCover(b)}<div class="ba">${esc(b.author || '')}</div></div>`).join('')}
         ${g.id === 'mine' ? `<div class="book add" data-add="1"><div class="cv"><span>${ICON.plus}${esc(t('addBooks'))}</span></div></div>` : ''}</div>
-      <div class="glass"><i class="screw l" style="--r:${20 + gi * 37}deg"></i><i class="screw r" style="--r:${70 + gi * 23}deg"></i></div>
     </div>`).join('');
-  $$('.shelf').forEach(sh => {
-    const row = sh.querySelector('.shelf-row'), [bl, br] = sh.querySelectorAll('.shelf-nav button');
-    const upd = () => { bl.disabled = row.scrollLeft < 4; br.disabled = row.scrollLeft + row.clientWidth >= row.scrollWidth - 4; };
-    row.addEventListener('scroll', upd, { passive: true }); upd();
-    sh.querySelectorAll('.shelf-nav button').forEach(b => b.onclick = () => row.scrollBy({ left: +b.dataset.dir * (122 * 2), behavior: 'smooth' }));
-  });
 }
 $('#library').addEventListener('click', e => {
   const add = e.target.closest('[data-add]'); if (add) return openAdd();
@@ -161,6 +187,26 @@ function bookMenu(id) {
   });
 }
 $('#btnAdd').onclick = () => openAdd();
+$('#libOrb').onclick = () => { const id = $('#libOrb').dataset.open; if (id) { unlockAudio(); openBook(id, true); } };
+$('#btnSettings').onclick = () => openAppSettings();
+function themePicker() {
+  return `<div class="themes">${['paper', 'sepia', 'night'].map(th => `<button class="theme-sw ${prefs.theme === th ? 'on' : ''}" data-t="${th}"><b>Аа</b>${t(th)}</button>`).join('')}</div>`;
+}
+function mountThemePicker(body) {
+  body.querySelectorAll('.theme-sw').forEach(b => b.onclick = () => { prefs.theme = b.dataset.t; savePrefs(); applyLook(); body.querySelectorAll('.theme-sw').forEach(x => x.classList.toggle('on', x === b)); });
+}
+function openAppSettings() {
+  openSheet(`<div class="sh-title">${t('settings')}<button class="x" data-close>${ICON.x}</button></div>
+    <div class="sh-label">${t('appearance')}</div>${themePicker()}
+    <div class="sh-label">${t('language')}</div>
+    <div class="segs" id="sgUi"><button data-v="ru" class="${uiLang() === 'ru' ? 'on' : ''}">Русский</button><button data-v="en" class="${uiLang() === 'en' ? 'on' : ''}">English</button></div>
+    <div class="row" data-a="about" style="margin-top:14px"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2M12 7.8v.01"/></svg></div><div class="tx"><b>${t('about')}</b><small>Murmur ${APP_VERSION}</small></div></div>
+    <div class="app-ver">Murmur ${APP_VERSION}</div>`, body => {
+    mountThemePicker(body);
+    body.querySelector('#sgUi').onclick = e => { const b = e.target.closest('button'); if (!b || b.dataset.v === uiLang()) return; setUiLang(b.dataset.v); renderLibrary(); closeSheet(); setTimeout(openAppSettings, 360); };
+    body.querySelector('[data-a=about]').onclick = () => { closeSheet(); setTimeout(() => $('#btnAbout').onclick(), 360); };
+  });
+}
 $('#btnAbout').onclick = () => openSheet(`<div class="sh-title">${t('about')}<button class="x" data-close>${ICON.x}</button></div>
   <div class="about"><img class="about-icon" src="icons/icon-192.png?v=${APP_VERSION}" alt=""><div class="brand">murmur<i></i></div><small>v${APP_VERSION}</small><p>${t('aboutLead')}</p>
   <h4>${t('privacy')}</h4><p>${t('privacyBody')}</p>
@@ -701,7 +747,9 @@ function extendHyphenRect(el, r0) {
 }
 /** typographic metrics for a font/size: x-height, cap-height, baseline — not the word's own extenders. */
 function fontInk(cs) {
-  const font = cs.font, fs = parseFloat(cs.fontSize) || 18;
+  const fs = parseFloat(cs.fontSize) || 18;
+  // cs.font is '' when a font-variant / feature is set: rebuild it so the canvas measures the real face
+  const font = cs.font || `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
   const canvas = fontInk._c || (fontInk._c = document.createElement('canvas'));
   const ctx = canvas.getContext('2d');
   const key = font + '|' + fs;
@@ -859,7 +907,7 @@ function layoutPages() {
     if (sc.scrollTop) sc.scrollTop = 0;
     const pw = pageW();
     const top = rdTopPx();
-    const bottom = 24 + envInset('bottom');
+    const bottom = 124 + envInset('bottom');
     const h = Math.max(80, Math.round(sc.clientHeight - top - bottom));
     const key = pw + '|' + top + '|' + bottom + '|' + h;
     if (S._pgKey === key) return; // nothing changed — touching column CSS here makes WebKit flash the page
@@ -867,7 +915,7 @@ function layoutPages() {
     S.lastPw = pw;
     S._layoutN = (S._layoutN || 0) + 1;
     sc.style.setProperty('--rd-top', top + 'px');
-    // the column height is constant: dock / player overlay the page (with .rd-fade) so showing
+    // the column height is constant and ends above the orbit band, so showing
     // or hiding the controls never shifts the text
     sc.style.setProperty('--pg-b', bottom + 'px');
     sc.style.setProperty('--pg-h', h + 'px');
@@ -881,10 +929,9 @@ function readingCenterY() {
   const sr = sc.getBoundingClientRect();
   const bar = document.querySelector('#reader .rd-bar');
   const top = (!prefs.bare && bar) ? Math.max(sr.top, bar.getBoundingClientRect().bottom) : sr.top;
-  const player = $('#player'), dock = $('#dock');
+  const dock = $('#dock');
   let bottom = sr.bottom;
-  if (player && player.classList.contains('show') && !prefs.bare) bottom = Math.min(bottom, player.getBoundingClientRect().top);
-  else if (dock && !prefs.bare) bottom = Math.min(bottom, dock.getBoundingClientRect().top);
+  if (dock && !prefs.bare) bottom = Math.min(bottom, dock.getBoundingClientRect().top);
   return (top + bottom) / 2;
 }
 function wordMidY(el) { const r = el.getBoundingClientRect(); return (r.top + r.bottom) / 2; }
@@ -1085,8 +1132,8 @@ if (window.visualViewport) {
   visualViewport.addEventListener('scroll', () => { syncViewport(); positionHL(true); positionHandles(); });
 }
 $('#app').addEventListener('scroll', () => { $('#app').scrollLeft = 0; $('#app').scrollTop = 0; });
-document.fonts && document.fonts.ready.then(() => { positionHL(true); if (S.selRange) positionHandles(); });
-document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => requestAnimationFrame(() => { positionHL(true); if (S.selRange) positionHandles(); }));
+document.fonts && document.fonts.ready.then(() => { fontInk._m?.clear(); positionHL(true); if (S.selRange) positionHandles(); });
+document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => requestAnimationFrame(() => { fontInk._m?.clear(); positionHL(true); if (S.selRange) positionHandles(); }));
 
 function updateProgress() {
   if (!S.model) return;
@@ -1100,6 +1147,7 @@ function updateProgress() {
   const pg = prefs.pages ? pageInfo() : null;
   $('#rdNavPct').textContent = pg ? `${t('pageShort')} ${pg.i + 1} / ${pg.n} · ${fmtPct(bp.f)}` : `${fmtPct(bp.f)} · ${fmtLeft(bp.left)}`;
   $('#rdNavBar').style.width = (bp.f * 100).toFixed(1) + '%';
+  orbitSync();
 }
 /* ------------------------------ whole-book position ------------------------------ */
 // word counts per chapter (cached per book + chapter count, so OCR books growing page by page stay right)
@@ -1439,9 +1487,7 @@ function chromeTop() {
 function chromeBottom() {
   let bottom = innerHeight - envInset('bottom');
   const dock = document.querySelector('#dock');
-  const player = document.querySelector('#player');
   if (dock && !prefs.bare) bottom = Math.min(bottom, dock.getBoundingClientRect().top);
-  if (player && player.classList.contains('show') && !prefs.bare) bottom = Math.min(bottom, player.getBoundingClientRect().top);
   return bottom;
 }
 /** iOS-style: above the first line with a gap; if that hits the header, below the last line. Never overlaps the selection or handles. */
@@ -1710,6 +1756,7 @@ function setMode_(m, silent) {
   positionHL();
   if (!silent) hidePop();
   requestAnimationFrame(syncPlayerHeight);
+  orbitSync();
 }
 $('#dSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.mode === 'listen') { unlockAudio(); warmFirst(); } setMode(b.dataset.mode); };
 
@@ -1733,6 +1780,7 @@ async function syncVoice() {
   $('#pVoice .v').textContent = vo ? vo.name : '—';
   $('#pVoice .dot').classList.toggle('neural', eng.id === 'neural');
   $('#pSpeed').textContent = fmtRate(prefs.rate);
+  orbitSync();
   if (biOn()) await setupBilingualVoice(); else player.bilingual = null;
 }
 async function setupBilingualVoice() {
@@ -1773,6 +1821,7 @@ player.on.state = () => {
   if (!player.playing && S.book && S.model && S.curW >= 0) { S.book.pos = placeOf(S.curW); savePos(); } // pause / stop: exact place saved now
   positionHL();
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = player.playing ? 'playing' : 'paused';
+  orbitSync();
 };
 player.on.end = () => {
   if (S.timer && S.timer.endOfChapter) { stopTimer(true); return; }
@@ -2106,6 +2155,9 @@ $('#rdMore').onclick = () => {
   const b = S.book;
   const langs = TR_LANGS.filter(l => l !== b.lang).map(l => `<option value="${l}" ${l === biTarget() ? 'selected' : ''}>${esc(langName(l, uiLang()))}</option>`).join('');
   openSheet(`<div class="sh-title">${t('settings')}<button class="x" data-close>${ICON.x}</button></div>
+    <div class="sh-label">${t('appearance')}</div>${themePicker()}
+    <div class="row" data-a="look" style="margin-top:6px"><div class="ic"><span style="font:600 15px/1 var(--display)">Aa</span></div><div class="tx"><b>${t('textSize')} · ${t('typeface')}</b><small>${prefs.fs}px · ${{ literata: 'Literata', source: 'Source Serif', inter: 'Inter' }[prefs.font] || 'Literata'}</small></div><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+    <div class="sh-label">${t('readingVoice')}</div>
     <div class="row" data-tg="focus"><div class="ic">${ICON.focus}</div><div class="tx"><b>${t('focus')}</b></div><i class="sw ${prefs.focus ? 'on' : ''}"></i></div>
     <div class="row" data-tg="bi"><div class="ic">${ICON.tr}</div><div class="tx"><b>${t('bilingual')}</b></div><i class="sw ${prefs.bi ? 'on' : ''}"></i></div>
     <div class="row" style="cursor:default"><div class="tx" style="padding-left:48px"><b style="font-weight:500;font-size:14px;color:var(--ink2)">${t('translateTo')}</b></div><select id="biTo" class="row-select" aria-label="${t('translateTo')}">${langs}</select></div>
@@ -2115,6 +2167,8 @@ $('#rdMore').onclick = () => {
     <div class="row" data-tg="skip"><div class="ic">${ICON.wand}</div><div class="tx"><b>${t('skipFiller')}</b><small>${t('skipFillerHint')}</small></div><i class="sw ${prefs.skip ? 'on' : ''}"></i></div>
     <div class="app-ver" id="appVer">Murmur ${APP_VERSION}</div>
 `, body => {
+    mountThemePicker(body);
+    body.querySelector('[data-a=look]').onclick = () => { closeSheet(); setTimeout(() => openLook('size'), 360); };
     body.querySelectorAll('[data-tg]').forEach(r => r.onclick = () => {
       const k = r.dataset.tg, sw = r.querySelector('.sw');
       if (k === 'focus') { toggleFocus(); sw.classList.toggle('on', prefs.focus); }
@@ -2190,9 +2244,10 @@ function setTimer(v) {
 function stopTimer(fired) { clearInterval(S.timer?.iv); S.timer = null; player.pause(); player.setVolume(1); renderTimer(); if (fired) toast(t('timerDone')); }
 function renderTimer() {
   const el = $('#dTimerTxt'), btn = $('#dTimer');
-  if (!S.timer) { el.textContent = t('timer'); btn.classList.remove('active'); return; }
+  if (!S.timer) { el.textContent = t('timer'); btn.classList.remove('active'); orbitSync(); return; }
   btn.classList.add('active');
   el.textContent = S.timer.endOfChapter ? '§ ' + (S.sec + 1) : fmtClock(Math.max(0, (S.timer.end - Date.now()) / 1000));
+  orbitSync();
 }
 $('#dTimer').onclick = openTimer;
 
@@ -2508,5 +2563,116 @@ function reloadWhenIdle(ver) {
   toast(t('updateReady'), 4000);
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
-window.murmur = { S, prefs, player, APP_VERSION, openStudio, pagesLive, applyListenMarks, clearListenMarks, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
+
+/* ------------------------------ orbit: round player, satellites, arc menu on hold ------------------------------ */
+// tap the orb = play / pause; hold it = the arc menu (inner ring: modes, outer ring: speed). Drag to an item and release, or tap one.
+const ORB_SPEEDS = [1, 1.25, 1.5, 2];
+function orbitSync() {
+  const rd = $('#reader'); if (!rd || !S.model || !S.book) return;
+  const lm = S.mode === 'listen';
+  rd.classList.toggle('lm', lm);
+  const bp = bookProg();
+  const pr = $('#oRingPr'); if (pr) pr.style.strokeDasharray = `${Math.max(0.4, bp.f * 100).toFixed(2)} 100`;
+  if (lm) {
+    const n = S.model.sents.length, s = Math.max(0, S.curS);
+    $('#oInfoT').textContent = prefs.pages ? `${s + 1} / ${n}` : t('sentenceN').replace('{a}', s + 1).replace('{b}', n);
+    const vn = ($('#pVoice .v')?.textContent || '').trim();
+    const tm = S.timer ? ' · ' + ($('#dTimerTxt')?.textContent || '') : '';
+    $('#oInfoS').textContent = [vn && vn !== '—' ? vn.split(/[ ,(]/)[0] : '', t('leftT') + ' ' + fmtLeft(bp.left).replace('~', '')].filter(Boolean).join(' · ') + tm;
+  }
+  $('#pPlay').setAttribute('aria-label', player.playing ? 'Pause' : 'Play');
+}
+function arcItemsHTML() {
+  const vo = ($('#pVoice .v')?.textContent || '—').trim().split(/[ ,(]/)[0];
+  const tmr = S.timer ? ($('#dTimerTxt')?.textContent || '') : t('off');
+  const on = t('onShort'), off = t('off');
+  return [
+    { k: 'voice', n: t('voice'), v: vo, ic: '<svg viewBox="0 0 24 24"><path d="M12 3a3.5 3.5 0 0 1 3.5 3.5v5a3.5 3.5 0 0 1-7 0v-5A3.5 3.5 0 0 1 12 3zM5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/></svg>' },
+    { k: 'timer', n: t('sleepTimer'), v: tmr, on: !!S.timer, ic: '<svg viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></svg>' },
+    { k: 'tr', n: t('translationT'), v: prefs.bi ? on : off, on: !!prefs.bi, ic: ICON.tr },
+    { k: 'focus', n: t('focusT'), v: prefs.focus ? on : off, on: !!prefs.focus, ic: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>' },
+    { k: 'pages', n: t('pagesMode'), v: prefs.pages ? t('pagesSide') : t('pagesScroll'), on: !!prefs.pages, ic: '<svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>' }
+  ];
+}
+function openArc() {
+  const rd = $('#reader'), m = $('#arcm'), box = $('#arcItems'); if (!rd || !m) return;
+  hidePop(); $('#coach')?.classList.remove('show'); prefs.hints = prefs.hints || {}; if (!prefs.hints.orbit) { prefs.hints.orbit = 1; savePrefs(); }
+  const rr = rd.getBoundingClientRect(), orb = $('#pPlay').getBoundingClientRect();
+  const W = rr.width, cx = orb.left + orb.width / 2 - rr.left, cy = orb.top + orb.height / 2 - rr.top;
+  const R = Math.min(165, Math.round(W * 0.42)), R2 = R + 112;
+  let h = '';
+  arcItemsHTML().forEach((it, i) => {
+    const a = (180 + i * 22.5) * Math.PI / 180, x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
+    const lx = cx + (R + 54) * Math.cos(a), ly = cy + (R + 54) * Math.sin(a);
+    h += `<button class="rb ${it.on ? 'on' : ''}" data-k="${it.k}" style="left:${(x - 27).toFixed(0)}px;top:${(y - 27).toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}</button>`;
+    h += `<div class="rl" style="left:${Math.max(4, lx - 44).toFixed(0)}px;top:${(ly - 15).toFixed(0)}px"><b>${esc(it.n)}</b>${esc(it.v)}</div>`;
+  });
+  const cur = ORB_SPEEDS.reduce((a, v) => Math.abs(v - prefs.rate) < Math.abs(a - prefs.rate) ? v : a);
+  let lx0 = 0, ly0 = 0;
+  ORB_SPEEDS.forEach((v, i) => {
+    const a = (191.25 + i * 22.5) * Math.PI / 180, x = Math.max(8, cx + R2 * Math.cos(a) - 25), y = cy + R2 * Math.sin(a) - 16;
+    if (i === ORB_SPEEDS.length - 1) { lx0 = x; ly0 = y; }
+    h += `<button class="sp ${v === cur && Math.abs(v - prefs.rate) < 0.01 ? 'on' : ''}" data-rate="${v}" style="left:${x.toFixed(0)}px;top:${y.toFixed(0)}px">${fmtRate(v)}</button>`;
+  });
+  h += `<div class="splab" style="left:${Math.max(4, lx0 - 98).toFixed(0)}px;top:${(ly0 + 11).toFixed(0)}px">${t('speed')}</div>`;
+  box.innerHTML = h;
+  const t1 = m.querySelector('.a1'), t2 = m.querySelector('.a2');
+  Object.assign(t1.style, { left: cx - R + 'px', top: cy - R + 'px', width: 2 * R + 'px', height: 2 * R + 'px' });
+  Object.assign(t2.style, { left: cx - R2 + 'px', top: cy - R2 + 'px', width: 2 * R2 + 'px', height: 2 * R2 + 'px' });
+  applyI18n();
+  m.classList.add('show'); m.setAttribute('aria-hidden', 'false'); rd.classList.add('arc-on');
+  navigator.vibrate?.(10);
+}
+function closeArc() { const m = $('#arcm'); if (!m) return; m.classList.remove('show'); m.setAttribute('aria-hidden', 'true'); $('#reader').classList.remove('arc-on'); $$('#arcItems .hov').forEach(x => x.classList.remove('hov')); }
+const arcOpen = () => $('#arcm')?.classList.contains('show');
+function arcAct(el) {
+  if (!el) return;
+  const k = el.dataset.k, r = el.dataset.rate;
+  closeArc();
+  if (r) { const v = +r; prefs.rate = v; savePrefs(); player.setRate(v); $('#pSpeed').textContent = fmtRate(v); updateProgress(); toast(`${t('speed')}: ${fmtRate(v)}`, 1400); return; }
+  if (k === 'voice') return openVoices();
+  if (k === 'timer') return openTimer();
+  if (k === 'tr') { setBilingual(!prefs.bi); toast(`${t('translationT')}: ${prefs.bi ? t('onShort') : t('off')}`, 1400); return; }
+  if (k === 'focus') { toggleFocus(); return; }
+  if (k === 'pages') { setPages(!prefs.pages); toast(`${t('pagesMode')}: ${prefs.pages ? t('pagesSide') : t('pagesScroll')}`, 1400); }
+}
+const arcAt = (x, y) => document.elementFromPoint(x, y)?.closest('#arcItems .rb, #arcItems .sp');
+(() => {
+  const orb = $('#pPlay'); let tmr = 0, down = null, long = false;
+  const hov = el => { $$('#arcItems .hov').forEach(x => x !== el && x.classList.remove('hov')); el?.classList.add('hov'); };
+  orb.addEventListener('contextmenu', e => e.preventDefault());
+  orb.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    down = { x: e.clientX, y: e.clientY }; long = false; clearTimeout(tmr); S.orbLong = 0; // a new press: an old hold no longer swallows clicks
+    tmr = setTimeout(() => { long = true; S.orbLong = Date.now(); openArc(); }, 420);
+  });
+  window.addEventListener('pointermove', e => {
+    if (!down) return;
+    if (long) { hov(arcAt(e.clientX, e.clientY)); return; }
+    if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 14) { clearTimeout(tmr); down = null; }
+  });
+  const up = e => {
+    clearTimeout(tmr);
+    if (down && long && e.type === 'pointerup') { const el = arcAt(e.clientX, e.clientY); if (el) arcAct(el); }
+    down = null;
+  };
+  // window-level: a finger is captured by the orb, a mouse / pen may leave it while dragging to an item
+  window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  // the click that ends a hold is not a play / pause tap
+  window.addEventListener('click', e => { if (S.orbLong && Date.now() - S.orbLong < 2500 && e.target.closest && e.target.closest('#pPlay')) { e.stopImmediatePropagation(); e.preventDefault(); S.orbLong = 0; } }, true);
+  $('#arcm').addEventListener('click', e => {
+    const el = e.target.closest('.rb, .sp');
+    if (el) { arcAct(el); return; }
+    if (Date.now() - (S.orbLong || 0) < 500) return;
+    closeArc();
+  });
+  orb.addEventListener('click', () => { if (!player.playing) setTimeout(() => { if (S.screen === 'reader' && !uiBusy() && !arcOpen() && !player.playing) hint('orbit', t('hintOrbit')); }, 2500); });
+})();
+$('#oStop').onclick = () => { setMode('read'); };
+$('#oAa').onclick = () => openLook('size');
+$('#oTheme').onclick = () => openLook('theme');
+window.addEventListener('popstate', () => closeArc());
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && arcOpen()) closeArc(); });
+
+window.murmur = { orbitSync, openArc, closeArc, openAppSettings, S, prefs, player, APP_VERSION, openStudio, pagesLive, applyListenMarks, clearListenMarks, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
 boot();
