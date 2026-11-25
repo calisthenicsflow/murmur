@@ -134,7 +134,7 @@ body.big-type .rd-text p.first::first-letter{float:none;font-size:1.3em;line-hei
 .rd-next{margin:28px 26px 0;text-align:center}
 .rd-next button{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;border-radius:22px;border:1.3px solid var(--ink);font-weight:600;font-size:14px}
 .rd-next .end{font-family:var(--display);font-style:italic;font-size:20px;color:var(--muted)}
-.recenter{position:absolute;left:50%;bottom:calc(var(--safe-b) + 78px + var(--player-h, 157px) + 14px);z-index:25;transform:translate(-50%,12px);opacity:0;pointer-events:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border-radius:22px;background:var(--accent);color:var(--accent-ink);box-shadow:0 8px 20px -8px var(--accent);transition:.35s var(--ease),bottom .35s var(--ease);line-height:0}
+.recenter{position:absolute;left:50%;bottom:calc(var(--safe-b) + 96px);z-index:25;transform:translate(-50%,12px);opacity:0;pointer-events:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border-radius:22px;background:var(--accent);color:var(--accent-ink);box-shadow:0 8px 20px -8px var(--accent);transition:.35s var(--ease),bottom .35s var(--ease);line-height:0}
 .recenter svg{width:20px;height:20px;stroke-width:2.2;display:block;margin:0}
 .recenter.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 /* dock */

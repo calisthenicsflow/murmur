@@ -6,7 +6,7 @@ body[data-theme=night]{ --hair:rgba(201,164,106,.26); --chip:#0D0C0B; --chipB:rg
 body{font-family:var(--ui)}
 /* lining figures for Cormorant numbers in the UI. Never on the reading text: a non-default font-variant / feature empties
    getComputedStyle().font, which the highlight box measures with (fontInk). */
-#sheet,#stats,#library,#quotes,.orbit,.arcm{font-feature-settings:"lnum" 1;font-variant-numeric:lining-nums}
+#sheet,#stats,#library,#quotes,.cap{font-feature-settings:"lnum" 1;font-variant-numeric:lining-nums}
 html,body{background:var(--bg)}
 
 /* ---------- shared bits ---------- */
@@ -90,68 +90,6 @@ body[data-theme=sepia] .fc1{background:#F6EEDF}
 .rd-next button{border:1px solid var(--hair);background:var(--chip)}
 .rd-next .end{font-family:var(--display)}
 
-/* the orbit band (1.6.2): only the orb + its progress ring. No floor, no satellites — the text stays visible. */
-#reader .dock.orbit{display:block;position:absolute;left:auto;right:0;bottom:0;width:132px;height:calc(var(--safe-b) + 120px);padding:0;gap:0;z-index:30;pointer-events:none;
-  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.orbit>*{pointer-events:auto}
-.orbit .legacy,.orbit .sat,.orbit .o-info,.orbit .o-trans{display:none!important}
-#pPlay.orb{position:absolute;right:26px;bottom:calc(var(--safe-b) + 22px);width:76px;height:76px;touch-action:none;-webkit-touch-callout:none;z-index:3;transition:transform .25s var(--spring),box-shadow .3s}
-#pPlay.orb svg{width:28px;height:28px;fill:currentColor;stroke:none}
-#pPlay.orb:active{transform:scale(.93)}
-#pPlay.orb.playing::after{border-color:var(--accent);animation:orbpulse 2.6s var(--ease) infinite}
-@keyframes orbpulse{0%{transform:scale(1);opacity:.45}100%{transform:scale(1.45);opacity:0}}
-#pPlay .spin{inset:-6px;border-top-color:var(--accent)}
-.o-ring{position:absolute;right:12px;bottom:calc(var(--safe-b) + 8px);width:104px;height:104px;pointer-events:none!important}
-.o-ring svg{width:100%;height:100%;overflow:visible;transform:rotate(-90deg)}
-.o-ring circle{fill:none;stroke-width:3}.o-ring .trk{stroke:var(--line)}
-.o-ring .pr{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:0 100;transition:stroke-dasharray .5s var(--ease)}
-body[data-theme=night] .o-ring .pr{filter:drop-shadow(0 0 3px var(--accent))}
-#reader.bare .dock.orbit{transform:translateY(calc(100% + 150px));opacity:0;pointer-events:none}
-#reader.bare .dock.orbit>*{pointer-events:none}
-.player{display:none!important}
-
-/* the orbits (hold the orb). A light dim only — the page stays readable behind it. */
-:root{--veil:rgba(244,239,230,.42)} body[data-theme=sepia]{--veil:rgba(235,221,194,.42)} body[data-theme=night]{--veil:rgba(7,7,7,.42)}
-.arcm{position:absolute;inset:0;z-index:44;background:var(--veil);opacity:0;visibility:hidden;transition:opacity .25s var(--ease),visibility 0s .25s;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;overflow:hidden}
-.arcm.show{opacity:1;visibility:visible;transition:opacity .25s var(--ease),visibility 0s}
-#reader.arc-on .dock.orbit{z-index:46}
-.arc-ttl{position:absolute;top:calc(var(--safe-t) + 66px);left:20px;right:20px;pointer-events:none}
-.arc-ttl>*{pointer-events:auto}
-.arc-ttl .ttl{display:inline-block;font-family:var(--display);font-style:italic;font-weight:500;font-size:32px;line-height:1.1;letter-spacing:-.01em;color:var(--ink);background:var(--bg);padding:2px 10px 4px;margin-left:-10px;border-radius:12px}
-.arc-ttl .st{display:table;font:500 13px/1.4 var(--ui);color:var(--ink2);margin-top:6px;max-width:330px;background:var(--bg);padding:5px 10px;margin-left:-10px;border-radius:10px}
-.arc-row{display:flex;gap:8px;margin-top:10px}
-.arc-row:first-child{margin:0 0 12px}
-.ach{height:38px;min-width:38px;padding:0 13px;border-radius:19px;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--chip);border:1px solid var(--chipB);color:var(--ink);font:600 13px/1 var(--ui);box-shadow:var(--sat-sh)}
-.ach svg{width:16px;height:16px;stroke-width:1.8}
-.ach:active{transform:scale(.94)}
-.arc-trk{position:absolute;border-radius:50%;pointer-events:none}
-.arc-trk.a1{border:1px solid var(--trk2)}.arc-trk.a2{border:1px dashed var(--trk)}
-.arcm.spd .arc-trk{opacity:0}
-.arcm *{font-feature-settings:"lnum" 1;font-variant-numeric:lining-nums}
-.arcm .rb{position:absolute;width:52px;height:52px;border-radius:50%;background:var(--chip);border:1px solid var(--chipB);box-shadow:var(--sat-sh);display:grid;place-items:center;color:var(--ink);transform:scale(.6);opacity:0;transition:transform .3s var(--spring),opacity .2s,background .2s,border-color .2s}
-.arcm .rb svg{width:21px;height:21px;stroke-width:1.6}
-.arcm.show .rb,.arcm.show .ch{transform:none;opacity:1}
-.arcm .rb.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);box-shadow:var(--glow)}
-.arcm .rb.hov,.arcm .ch.hov,.ach.hov{transform:scale(1.12);border-color:var(--accent)}
-.arcm .rl{position:absolute;display:flex;flex-direction:column;align-items:center;background:var(--card);border:1px solid var(--chipB);border-radius:11px;padding:4px 9px 5px;pointer-events:none;white-space:nowrap;font:500 11px/1.25 var(--ui);color:var(--ink2)}
-.arcm .rl b{display:block;font:700 12px/1.2 var(--ui);color:var(--ink);max-width:88px;overflow:hidden;text-overflow:ellipsis}
-.arcm .rl b,.arcm .rl span{background:none;padding:0}
-.arcm .rl span{margin-top:1px;max-width:88px;overflow:hidden;text-overflow:ellipsis}
-.arcm .ch{position:absolute;min-width:76px;max-width:120px;height:38px;border-radius:19px;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 12px;background:var(--chip);border:1px solid var(--chipB);color:var(--ink);box-shadow:var(--sat-sh);font:600 13px/1 var(--ui);white-space:nowrap;transform:scale(.6);opacity:0;transition:transform .3s var(--spring),opacity .2s}
-.arcm .ch svg{width:15px;height:15px;stroke-width:1.8;flex:none}
-.arcm .ch span{overflow:hidden;text-overflow:ellipsis}
-.arcm .ch[data-k=text] span{font-family:var(--display);font-size:15px;font-weight:600;font-variant-numeric:lining-nums}
-.arcm .ch.acc{border-color:var(--accent);color:var(--accent-deep)}
-/* speed slider: the same orbit, a knob that runs along it */
-.arc-ttl .spv{font:600 58px/1 var(--display);font-variant-numeric:lining-nums;font-feature-settings:"lnum" 1;letter-spacing:-.02em;color:var(--ink);margin-top:4px;display:inline-block;background:var(--bg);padding:0 10px;margin-left:-10px;border-radius:12px}
-.arc-sl{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-.arc-sl .tr{fill:none;stroke:var(--trk);stroke-width:12;stroke-linecap:round}
-body[data-theme=night] .arc-sl .tr{stroke:rgba(242,236,226,.16)}
-.arc-sl .fl{fill:none;stroke:var(--accent);stroke-width:12;stroke-linecap:round}
-body[data-theme=night] .arc-sl .fl,body[data-theme=night] .arc-sl .kn{filter:drop-shadow(0 0 5px rgba(255,90,31,.6))}
-.arc-sl .tk{fill:var(--ink2);opacity:.55}
-.arc-sl text{font:700 13px var(--ui);font-variant-numeric:lining-nums;fill:var(--ink2);text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:6px;stroke-linejoin:round}
-.arc-sl .kn{fill:var(--accent);stroke:var(--bg);stroke-width:4}
 /* pages mode: the pill is painted under the text (own stacking context), and the spoken word gets the
    on-accent ink through the Custom Highlight API — nothing is toggled inside the columns. */
 #reader.pages .rd-scroll{z-index:0}
@@ -219,37 +157,6 @@ body[data-theme=night] .st-tile,body[data-theme=night] .st-week{border-color:rgb
 .st-actions .pill-black{background:var(--accent);color:var(--accent-ink);box-shadow:var(--glow)}
 .st-bookbtn,.st-pal,.st-save,.st-fmt{background:var(--chip);border-color:var(--hair)}
 
-/* 1.6.2: compact solid header card, label pills, scale pills — no full backdrop */
-.arcm .rb,.arcm .ch,.arcm .ach{background:var(--card)}
-.arcm .rb{width:50px;height:50px}
-.arcm .rb.on{background:var(--accent)}
-.arcm .rl b{font-size:12px}
-.arcm .rl span{font-size:11px;margin-top:1px}
-.arc-ttl{left:16px;right:auto;max-width:calc(100% - 32px)}
-.arc-card{display:inline-block;background:var(--card);border:1px solid var(--chipB);border-radius:18px;padding:10px 12px;box-shadow:var(--sat-sh);max-width:100%}
-.arc-card .st{display:block;background:none;padding:0;margin:0;max-width:none;font:500 13px/1.4 var(--ui);color:var(--ink2)}
-.arc-card .arc-row{margin:8px 0 0}
-.arc-card .arc-row:first-child{margin:0 0 8px}
-.arc-card .ach{height:36px;box-shadow:none}
-.arc-card .sph{display:flex;align-items:baseline;gap:10px;margin:2px 0 2px}
-.arc-card .ttl{display:inline;background:none;padding:0;margin:0;font-family:var(--display);font-style:italic;font-weight:500;font-size:24px;color:var(--ink)}
-.arc-card .spv{display:inline;background:none;padding:0;margin:0;font:600 40px/1 var(--display);font-variant-numeric:lining-nums;font-feature-settings:"lnum" 1;color:var(--ink);letter-spacing:-.02em}
-.arcm .sk{position:absolute;translate:-50% -50%;background:var(--card);border:1px solid var(--chipB);border-radius:9px;padding:2px 7px;font:700 12px/1.2 var(--ui);color:var(--ink2);font-variant-numeric:lining-nums;pointer-events:none;white-space:nowrap}
-
-/* 1.6.2 (t165u): radial dim centred on the orb — the one allowed gradient; fades in/out with .arcm opacity */
-:root{--dimc:40,28,16} body[data-theme=sepia]{--dimc:46,30,14} body[data-theme=night]{--dimc:0,0,0}
-.arcm{background:radial-gradient(circle var(--dr,520px) at var(--ox,85%) var(--oy,90%),rgba(var(--dimc),.4) 0,rgba(var(--dimc),.3) 28%,rgba(var(--dimc),.12) 62%,rgba(var(--dimc),0) 100%)}
-/* 1.6.2 (t166u): speed orbit — no header, discrete ticks, value pill beside the knob */
-.arc-row.bare{margin:0}
-.arc-sl line.tk{stroke:var(--ink2);stroke-width:2;stroke-linecap:round;opacity:.6;fill:none}
-.arcm .sk{font-size:11px;padding:2px 6px}
-.arcm .sk.on{color:var(--accent-deep);border-color:var(--accent)}
-.arcm .spk{position:absolute;translate:-50% -50%;background:var(--card);border:1.5px solid var(--accent);border-radius:12px;padding:4px 10px;font:700 17px/1.1 var(--ui);color:var(--ink);font-variant-numeric:lining-nums;pointer-events:none;white-space:nowrap;box-shadow:var(--sat-sh)}
-body[data-theme=night] .arcm .spk{box-shadow:0 0 10px rgba(255,90,31,.35)}
-/* 1.6.2 (t168u): pages mode — the column runs to the bottom; a compact orb sits in the corner under it */
-#reader.pages #pPlay.orb{right:20px;bottom:calc(var(--safe-b) + 10px);width:56px;height:56px}
-#reader.pages #pPlay.orb svg{width:22px;height:22px}
-#reader.pages .o-ring{right:14px;bottom:calc(var(--safe-b) + 4px);width:68px;height:68px}
 /* 1.6.2 (t169u): focus = the spoken word, big and centred on a solid orange pill (flat, light glow) */
 .f-stage{gap:26px}
 .f-word{display:flex;justify-content:center;align-items:center;min-height:96px}
@@ -261,18 +168,93 @@ body[data-theme=paper] .f-word span,body[data-theme=sepia] .f-word span{box-shad
 .f-s.cur.long{font-size:18px}.f-s.cur.xlong{font-size:16px}
 /* 1.6.2 QA: one size control in «Текст» (the slider with its number), not two */
 #fsSteps{display:none}
-/* 1.6.2: calmer speed arc, numbers just outside it, back / reset chips by the arc start */
-.arc-sl .tr{stroke-width:5;stroke:var(--trk2)}
-body[data-theme=night] .arc-sl .tr{stroke:rgba(242,236,226,.14)}
-.arc-sl .fl{stroke-width:5}
-.arc-sl line.tk{stroke-width:1.5;opacity:.5}
-.arcm .sk{font:600 11px/1.2 var(--ui);padding:2px 6px;color:var(--ink2);border-radius:8px}
-.arcm .sk.on{color:var(--ink2);border-color:var(--chipB)}
-.arcm .sp-ctl{position:absolute;translate:-50% 0;display:flex;gap:8px}
-.arcm .sp-ctl .ach{height:36px;min-width:36px;padding:0 11px;background:var(--card);box-shadow:var(--sat-sh)}
-.arcm .spk{font-size:15px;padding:3px 9px}
-/* orbit labels read toward their circle */
-.arcm .rl{align-items:flex-end;text-align:right}
-/* radial dim: ~40% at the orb in every theme, clear at the edges */
-:root{--dimc:34,22,10} body[data-theme=sepia]{--dimc:40,26,10} body[data-theme=night]{--dimc:0,0,0}
-.arcm{background:radial-gradient(circle var(--dr,520px) at var(--ox,85%) var(--oy,90%),rgba(var(--dimc),.42) 0,rgba(var(--dimc),.38) 30%,rgba(var(--dimc),.22) 62%,rgba(var(--dimc),.07) 85%,rgba(var(--dimc),0) 100%)}
+
+/* ===================== 1.7.0 — the capsule: Читать / Слушать in one floating pill =====================
+   Read: toggle · «Чтение · стр. X из Y» · Aa · ⋯   Listen: toggle · ‹‹ ▶ ›› · speed · timer   Speed: a snapping track.
+   Solid fills only; motion is transform / opacity (plus a 3px blur on the swapping panes). */
+:root{--capB:rgba(22,19,15,.10);--cap-sh:0 10px 30px rgba(60,40,20,.14);--segbg:#F4EFE6;--cap-ease:cubic-bezier(.22,1,.36,1);--cap-spring:cubic-bezier(.34,1.42,.5,1)}
+body[data-theme=sepia]{--capB:rgba(46,34,20,.14);--cap-sh:0 10px 30px rgba(70,46,16,.16);--segbg:#EBDDC2}
+body[data-theme=night]{--capB:rgba(242,236,226,.12);--cap-sh:0 10px 30px rgba(0,0,0,.6);--segbg:#070707}
+.rd-bar-sp{width:40px;height:40px;flex:none}
+.rd-nav-m:empty{display:none}
+.vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.hapt{position:fixed;left:-200px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
+.cap{position:absolute;left:0;right:0;margin:0 auto;bottom:calc(var(--safe-b) + 18px);width:min(326px,calc(100% - 32px));height:64px;z-index:30;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+  transition:transform .45s var(--cap-ease),opacity .3s var(--ease)}
+.cap-bg{position:absolute;inset:0;border-radius:32px;background:var(--card);border:1px solid var(--capB);box-shadow:var(--cap-sh)}
+.cap button{display:grid;place-items:center;color:var(--ink);-webkit-tap-highlight-color:transparent}
+.cap svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+/* toggle */
+.cseg{position:absolute;left:8px;top:8px;width:96px;height:48px;border-radius:24px;background:var(--segbg);border:1px solid var(--capB);display:flex;padding:3px;z-index:2;
+  transition:transform .42s var(--cap-spring),background-color .3s var(--ease),border-color .3s var(--ease)}
+.cseg .knob{position:absolute;left:3px;top:3px;width:44px;height:40px;border-radius:20px;background:var(--accent);box-shadow:0 0 14px -2px rgba(255,90,31,.55);transition:transform .42s var(--cap-spring);will-change:transform}
+body:not([data-theme=night]) .cseg .knob{box-shadow:0 6px 14px -6px rgba(255,90,31,.7)}
+.cseg.listen .knob{transform:translateX(44px)}
+.cseg button{position:relative;z-index:1;width:44px;height:40px;border-radius:20px;color:var(--muted);transition:color .3s var(--ease),opacity .3s var(--ease),transform .18s var(--ease)}
+.cseg button.on{color:var(--accent-ink)}
+/* panes share one slot; only the live one is visible */
+.cp{position:absolute;top:8px;left:112px;right:8px;height:48px;display:flex;align-items:center;opacity:0;visibility:hidden;pointer-events:none;
+  transform:translateY(6px) scale(.97);filter:blur(3px);transition:opacity .24s var(--ease),transform .38s var(--cap-ease),filter .24s var(--ease),visibility 0s .38s}
+.cap[data-st=read] .cp-read,.cap[data-st=listen] .cp-listen,.cap[data-st=speed] .cp-speed{opacity:1;visibility:visible;pointer-events:auto;transform:none;filter:none;
+  transition:opacity .3s var(--ease) .08s,transform .42s var(--cap-spring) .06s,filter .3s var(--ease) .06s,visibility 0s}
+.c-info{flex:1;min-width:0;padding-left:14px;display:flex;flex-direction:column;gap:3px}
+.c-info b{font:700 14px/1.15 var(--ui);color:var(--ink);white-space:nowrap}
+.c-info span{font:500 11.5px/1.2 var(--ui);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:lining-nums tabular-nums}
+.cbtn{width:44px;height:44px;flex:none;border-radius:50%;border:1px solid var(--capB);background:transparent;transition:transform .18s var(--ease),background-color .2s}
+.cbtn+.cbtn{margin-left:8px}
+.cbtn.aa{font:600 17px/1 var(--display);letter-spacing:.01em;font-variant-numeric:lining-nums}
+.cbtn svg{width:20px;height:20px;fill:currentColor;stroke:none}
+.c-tr{flex:1;min-width:0;display:flex;align-items:center;justify-content:space-around}
+.ctb{width:36px;height:36px;border-radius:50%;flex:none;transition:transform .18s var(--ease),color .25s}
+.cap .play{width:48px;height:48px;box-shadow:0 0 16px -2px rgba(255,90,31,.6)}
+body:not([data-theme=night]) .cap .play{box-shadow:0 6px 16px -6px rgba(255,90,31,.75)}
+.cap .play svg{width:20px;height:20px;fill:currentColor;stroke:none}
+.cap .play.playing::after{animation:none;border-color:transparent}
+.cspd{flex:none;width:50px;height:44px;border-left:1px solid var(--capB);font:700 13px/1 var(--ui);letter-spacing:-.01em;color:var(--ink);font-variant-numeric:lining-nums tabular-nums;transition:transform .18s var(--ease)}
+.tmr{width:38px;height:40px;margin-right:-2px}
+.tmr.on{color:var(--accent)}
+.tmr.on svg{fill:var(--accent);filter:drop-shadow(0 0 6px rgba(255,90,31,.55))}
+/* the listen controls stagger in */
+.cp-listen [style*="--i"]{opacity:0;transform:translateX(10px) scale(.86);transition:opacity .2s var(--ease),transform .2s var(--ease)}
+.cap[data-st=listen] .cp-listen [style*="--i"]{opacity:1;transform:none;transition:opacity .3s var(--ease) calc(var(--i) * 40ms + 70ms),transform .46s var(--cap-spring) calc(var(--i) * 40ms + 70ms)}
+.cap[data-st=listen] .cp-listen [style*="--i"]:active{transform:scale(.88);transition:transform .12s var(--ease)}
+.cap .cbtn:active,.cseg button:active{transform:scale(.9)}
+.cap .play:active{transform:scale(.9)}
+/* speed: the toggle folds to the orange headphones, the track takes the rest */
+.cap[data-st=speed] .cseg{transform:translateX(-47px);background-color:transparent;border-color:transparent}
+.cap[data-st=speed] .cseg button[data-mode=read]{opacity:0;pointer-events:none}
+.cp-speed{left:60px}
+.spd{position:relative;width:100%;height:48px;touch-action:none;cursor:pointer;outline:none}
+.spd-tr,.spd-fl{position:absolute;left:26px;right:26px;top:23px;height:2px;border-radius:1px;background:var(--capB)}
+body[data-theme=night] .spd-tr{background:rgba(242,236,226,.18)}
+.spd-fl{background:var(--accent);transform-origin:0 50%;transform:scaleX(0);transition:transform .38s var(--cap-spring)}
+.spd-tk i{position:absolute;top:18px;width:2px;height:12px;margin-left:-1px;border-radius:1px;background:var(--ink2);opacity:.45;transition:background-color .2s,opacity .2s}
+.spd-tk i.on{background:var(--accent);opacity:1}
+.spd-kn{position:absolute;left:-24px;top:9px;width:48px;height:30px;border-radius:15px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;
+  font:700 12.5px/1 var(--ui);font-variant-numeric:lining-nums tabular-nums;box-shadow:0 0 14px -2px rgba(255,90,31,.6);transition:transform .38s var(--cap-spring);will-change:transform}
+body:not([data-theme=night]) .spd-kn{box-shadow:0 6px 14px -6px rgba(255,90,31,.75)}
+.spd-nums{position:absolute;left:0;right:0;bottom:calc(100% + 8px);height:14px;pointer-events:none}
+/* a quiet plate behind the numbers so they stay legible over body text */
+.spd-nums::before{content:"";position:absolute;left:var(--nl,20px);width:var(--nw,280px);top:-6px;height:26px;border-radius:13px;background:var(--card);border:1px solid var(--capB);box-shadow:var(--cap-sh);opacity:0;transform:translateY(6px) scale(.96);transition:opacity .2s var(--ease),transform .2s var(--ease)}
+.cap[data-st=speed] .spd-nums::before{opacity:1;transform:none;transition:opacity .28s var(--ease) .05s,transform .4s var(--cap-spring) .05s}
+.spd-nums span{position:absolute;top:0;translate:-50% 0;font:600 11px/14px var(--ui);color:var(--muted);font-variant-numeric:lining-nums;white-space:nowrap;opacity:0;transform:translateY(5px);transition:opacity .2s var(--ease),transform .2s var(--ease)}
+.cap[data-st=speed] .spd-nums span{opacity:1;transform:none;transition:opacity .3s var(--ease) calc(var(--i) * 25ms + 90ms),transform .4s var(--cap-spring) calc(var(--i) * 25ms + 90ms)}
+.cap[data-st=speed] .spd-nums span.cur{opacity:0}
+/* hidden controls (tap an empty spot) */
+#reader.bare .cap{transform:translateY(calc(100% + 30px + var(--safe-b)));opacity:0;pointer-events:none}
+#reader.bare .cap *{pointer-events:none}
+.recenter{bottom:calc(var(--safe-b) + 96px)}
+#reader.bare .recenter{bottom:calc(var(--safe-b) + 34px)}
+.row.sub{padding-left:48px;cursor:default}
+.sheet .row .chev{margin-left:auto}
+@media (prefers-reduced-motion: reduce){
+  .cap,.cap *,.cp,.spd-nums span,.spd-nums::before{transition-duration:.12s!important;transition-delay:0s!important}
+  .cp,.cp-listen [style*="--i"],.spd-nums span{transform:none!important;filter:none!important}
+}
+
+/* translation options fold away while Перевод is off */
+.bi-sub{display:grid;grid-template-rows:1fr;transition:grid-template-rows .32s var(--cap-ease),opacity .25s var(--ease)}
+.bi-sub>div{min-height:0;overflow:hidden}
+.bi-sub.off{grid-template-rows:0fr;opacity:0}
+@media (prefers-reduced-motion:reduce){.bi-sub{transition:none}}

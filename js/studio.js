@@ -1,7 +1,7 @@
 // Murmur quote studio: pick a style, palette and format for a saved quote, preview live, share or save as PNG.
-import { db } from './db.js?v=1.6.2';
-import { t, uiLang } from './i18n.js?v=1.6.2';
-import { PRESETS, FORMATS, presetById, renderQuote, ensureFonts, loadFontCSS, sampleOf, cleanText } from './qrender.js?v=1.6.2';
+import { db } from './db.js?v=1.7.0';
+import { t, uiLang } from './i18n.js?v=1.7.0';
+import { PRESETS, FORMATS, presetById, renderQuote, ensureFonts, loadFontCSS, sampleOf, cleanText } from './qrender.js?v=1.7.0';
 
 const $ = (r, s) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

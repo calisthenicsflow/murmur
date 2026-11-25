@@ -1,19 +1,19 @@
-import { db } from './db.js?v=1.6.2';
-import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.6.2';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.6.2';
-import { coverSVG, autoCover } from './covers.js?v=1.6.2';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.6.2';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.6.2';
-import { Player } from './player.js?v=1.6.2';
-import { translateMany } from './translate.js?v=1.6.2';
-import { track, summary } from './stats.js?v=1.6.2';
-import { renderCard, shareCard } from './quotes.js?v=1.6.2';
-import { openStudio, defaultStyle } from './studio.js?v=1.6.2';
-import { presetById, FORMATS } from './qrender.js?v=1.6.2';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.6.2';
-import { SAMPLES } from './samples.js?v=1.6.2';
+import { db } from './db.js?v=1.7.0';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.7.0';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.7.0';
+import { coverSVG, autoCover } from './covers.js?v=1.7.0';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.7.0';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.7.0';
+import { Player } from './player.js?v=1.7.0';
+import { translateMany } from './translate.js?v=1.7.0';
+import { track, summary } from './stats.js?v=1.7.0';
+import { renderCard, shareCard } from './quotes.js?v=1.7.0';
+import { openStudio, defaultStyle } from './studio.js?v=1.7.0';
+import { presetById, FORMATS } from './qrender.js?v=1.7.0';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.7.0';
+import { SAMPLES } from './samples.js?v=1.7.0';
 
-export const APP_VERSION = '1.6.2';
+export const APP_VERSION = '1.7.0';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -35,6 +35,11 @@ const ICON = {
   wand: '<svg viewBox="0 0 24 24"><path d="M5 19L15 9M14 4v3M19.5 9.5h-3M17.7 5.3l-2 2M9 4.5l.8 1.7 1.7.8-1.7.8L9 9.5l-.8-1.7L6.5 7l1.7-.8z"/></svg>',
   file: '<svg viewBox="0 0 24 24"><path d="M14 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3.5V8h4.5M9 13h6M9 16.5h4"/></svg>',
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  mic: '<svg viewBox="0 0 24 24"><path d="M12 3a3.5 3.5 0 0 1 3.5 3.5v5a3.5 3.5 0 0 1-7 0v-5A3.5 3.5 0 0 1 12 3zM5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/></svg>',
+  colpages: '<svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>',
+  sound: '<svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7a7 7 0 0 1 0 10"/></svg>',
+  vib: '<svg viewBox="0 0 24 24"><rect x="8" y="3.5" width="8" height="17" rx="2"/><path d="M4.5 8.5v7M19.5 8.5v7M2 10.5v3M22 10.5v3"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" class="chev"><path d="M9 6l6 6-6 6"/></svg>',
   stop: '<svg viewBox="0 0 24 24" class="i-stop"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>'
 };
 const SHELVES = [
@@ -50,7 +55,7 @@ const FS_STEPS = [14, 16, 18, 21, 24, 28, 32, 36], FS_MIN = 14, FS_MAX = 36;
 const TR_LANGS = ['ru', 'en', 'es', 'de', 'fr', 'it', 'uk', 'pt', 'tr', 'zh', 'ja'];
 
 /* ------------------------------ state ------------------------------ */
-const DEF = { align: 'justify', theme: 'paper', fs: 19, font: 'literata', lh: 1.62, dim: 0, engine: 'auto', voices: {}, rate: 1, skip: true, bi: false, biTo: '', both: false, readTr: true, bare: false, hints: {}, focus: false, relay: '', pages: false, followHl: true };
+const DEF = { align: 'justify', theme: 'paper', fs: 19, font: 'literata', lh: 1.62, dim: 0, engine: 'auto', voices: {}, rate: 1, skip: true, bi: false, biTo: '', both: false, readTr: true, bare: false, hints: {}, focus: false, relay: '', pages: false, followHl: true, uiSound: true, haptics: true };
 const prefs = Object.assign({}, DEF, JSON.parse(localStorage.getItem('murmur:prefs') || '{}'));
 const savePrefs = () => localStorage.setItem('murmur:prefs', JSON.stringify(prefs));
 const followOn = () => prefs.followHl !== false;
@@ -82,7 +87,7 @@ function applyLook() {
   document.body.classList.toggle('big-type', prefs.fs >= 28); // smaller drop cap so long first words still fit beside it // justify makes huge gaps in a narrow column at big sizes
   const tc = { paper: '#F4EFE6', sepia: '#EBDDC2', night: '#070707' }[prefs.theme];
   $('meta[name=theme-color]').setAttribute('content', tc);
-  orbitSync();
+  capSync();
   requestAnimationFrame(() => { layoutPages(); positionHL(true); });
 }
 
@@ -372,7 +377,7 @@ async function openBook(id, autoplay = false) {
   renderSection(b.pos?.w || 0); renderTimer();
   // resuming somewhere inside the book: say where, briefly
   if ((b.pos?.sec || 0) > 0 || (b.pos?.w || 0) > 0) { const sn = S.model.sents[Math.max(0, S.curS)]?.text || ''; setTimeout(() => toast(t('continueFrom').replace('{x}', `«${sn.split(/\s+/).slice(0, 6).join(' ')}…» · ${fmtPct(bookProg().f)}`), 2600), 350); }
-  setTimeout(() => { if (S.screen === 'reader' && !prefs.bare && !uiBusy()) hint('orbit2', t('hintOrbit2')); }, 1200);
+  setTimeout(() => { if (S.screen === 'reader' && !prefs.bare && !uiBusy()) hint('cap170', t('hintCap')); }, 1200);
   if (autoplay) { unlockAudio(); startPlayback(S.curW >= 0 ? S.curW : 0); }
 }
 function leaveReader() { player.stop(); savePos(); hidePop(); $('#focus').classList.remove('show'); updateMediaSession(); }
@@ -526,7 +531,7 @@ function renderSection(startWord = 0, scroll = true) {
   if (prefs.pages) layoutPages();
   if (scroll) { if (sw > 0) scrollToWord(sw, false); else { $('#rdScroll').scrollTop = 0; $('#rdScroll').scrollLeft = 0; } }
   if (biOn()) ensureTranslations();
-  updateProgress(); updateMarkBtn();
+  updateProgress();
   if (prefs.focus) renderFocus(true);
   // the neighbouring chapters are rendered right away, so text is always there when the reader scrolls
   ensureWindow(); requestAnimationFrame(() => ensureWindow()); warmModels();
@@ -667,7 +672,7 @@ function setCurrent(w, fromPlayer) {
     }
     if (prefs.focus) renderFocus();
     updateProgress();
-    if (fromPlayer) { S.book.pos = placeOf(w); savePosSoon(); updateMarkBtn(); }
+    if (fromPlayer) { S.book.pos = placeOf(w); savePosSoon(); }
   }
   const active = S.mode === 'listen' && (player.playing || player.paused);
   if (mark && active) S.wordEls[w]?.classList.add('cw');
@@ -935,7 +940,7 @@ function layoutPages() {
     if (sc.scrollTop) sc.scrollTop = 0;
     const pw = pageW();
     const top = rdTopPx();
-    const bottom = 78 + envInset('bottom'); // 1.6.2: the page runs down to a compact corner orb (no strip / bar band)
+    const bottom = CAP_BAND + envInset('bottom'); // 1.7.0: the column ends just above the floating capsule, never under it
     const h = Math.max(80, Math.round(sc.clientHeight - top - bottom));
     const key = pw + '|' + top + '|' + bottom + '|' + h;
     if (S._pgKey === key) return; // nothing changed — touching column CSS here makes WebKit flash the page
@@ -943,7 +948,7 @@ function layoutPages() {
     S.lastPw = pw;
     S._layoutN = (S._layoutN || 0) + 1;
     sc.style.setProperty('--rd-top', top + 'px');
-    // the column height is constant and ends above the orbit band, so showing
+    // the column height is constant and ends above the capsule, so showing
     // or hiding the controls never shifts the text
     sc.style.setProperty('--pg-b', bottom + 'px');
     sc.style.setProperty('--pg-h', h + 'px');
@@ -1140,12 +1145,12 @@ const readPosSoon = debounce(() => {
   const sc = $('#rdScroll'), sr = sc.getBoundingClientRect(), top = sr.top + 90;
   if (prefs.pages) { // the first word on this page (a sentence may have started on the previous one)
     const w = S.wordEls.findIndex(el => { if (!el) return false; const r = el.getBoundingClientRect(); return r.width && r.left >= sr.left - 2 && r.left < sr.right - 2; });
-    if (w >= 0) { const s = S.model.words[w].s; S.curW = w; S.curS = s; S.sec = S.model.sents[s].sec ?? S.sec; $('#rdMini').textContent = chapterName(S.sec, curPara()); S.book.pos = placeOf(w); savePos(); updateMarkBtn(); updateProgress(); }
+    if (w >= 0) { const s = S.model.words[w].s; S.curW = w; S.curS = s; S.sec = S.model.sents[s].sec ?? S.sec; $('#rdMini').textContent = chapterName(S.sec, curPara()); S.book.pos = placeOf(w); savePos(); updateProgress(); }
     return;
   }
   for (const el of S.sentEls) {
     if (!el) continue; const r = el.getBoundingClientRect();
-    if (prefs.pages ? r.right > sr.left + 2 && r.left < sr.right : r.bottom > top) { const s = +el.dataset.s; const w = S.model.sents[s].words[0]; S.curW = w; S.curS = s; S.sec = S.model.sents[s].sec ?? S.sec; $('#rdMini').textContent = chapterName(S.sec, curPara()); S.book.pos = placeOf(w); savePos(); updateMarkBtn(); updateProgress(); break; }
+    if (prefs.pages ? r.right > sr.left + 2 && r.left < sr.right : r.bottom > top) { const s = +el.dataset.s; const w = S.model.sents[s].words[0]; S.curW = w; S.curS = s; S.sec = S.model.sents[s].sec ?? S.sec; $('#rdMini').textContent = chapterName(S.sec, curPara()); S.book.pos = placeOf(w); savePos(); updateProgress(); break; }
   }
 }, 250);
 const savePos = () => { if (S.book) db.set('books', S.book.id, S.book); };
@@ -1166,16 +1171,10 @@ document.fonts && document.fonts.addEventListener && document.fonts.addEventList
 function updateProgress() {
   if (!S.model) return;
   const n = S.model.sents.length, s = Math.max(0, S.curS);
-  $('#pBar').style.width = $('#thinProg i').style.width = ((s + 1) / n * 100) + '%';
-  $('#pPos').textContent = `${s + 1} / ${n}`;
-  const left = S.model.words.length - (S.curW > 0 ? S.curW : 0);
-  const min = Math.max(1, Math.round(left / (2.55 * player.rate) / 60));
-  $('#pLeft').textContent = `${S.book.sections.length > 1 ? (S.sec + 1) + ' ' + t('chapterOf') + ' ' + S.book.sections.length + ' · ' : ''}~${min} ${t('min')}`;
-  const bp = bookProg();
-  const pg = prefs.pages ? pageInfo() : null;
-  $('#rdNavPct').textContent = pg ? `${t('pageShort')} ${pg.i + 1} / ${pg.n} · ${fmtPct(bp.f)}` : `${fmtPct(bp.f)} · ${fmtLeft(bp.left)}`;
-  $('#rdNavBar').style.width = (bp.f * 100).toFixed(1) + '%';
-  orbitSync();
+  // progress lives in one place: the capsule («стр. X из Y»); the hairline shows only when the controls are hidden
+  $('#thinProg i').style.width = (bookProg().f * 100).toFixed(2) + '%';
+  const sub = S.book.author || ''; if ($('#rdSub').textContent !== sub) $('#rdSub').textContent = sub;
+  capSync();
 }
 /* ------------------------------ whole-book position ------------------------------ */
 // word counts per chapter (cached per book + chapter count, so OCR books growing page by page stay right)
@@ -1206,7 +1205,7 @@ function jumpTo(sec, frac = 0, w = null) {
   wi = Math.max(si.w0, Math.min(si.w0 + si.nW - 1, wi));
   wi = S.model.sents[S.model.words[wi].s].words[0];
   setCurrent(wi, false); S.lastUserScroll = 0;
-  S.sec = sec; b.pos = placeOf(wi); savePos(); updateMarkBtn(); updateProgress();
+  S.sec = sec; b.pos = placeOf(wi); savePos(); updateProgress();
   scrollToWord(wi, false); ensureWindow();
   requestAnimationFrame(() => { if (S.curW >= 0) scrollToWord(S.curW, false); });
   if (wasPlaying) startPlayback(S.curW);
@@ -1224,19 +1223,12 @@ const secName = (x, i, b = S.book) => chapterName(i, Infinity, b);
 
 
 /* ------------------------------ distraction-free (bare) mode ------------------------------ */
-function syncPlayerHeight() {
-  const p = $('#player'), r = $('#reader'); if (!r) return;
-  const show = p && p.classList.contains('show') && !prefs.bare;
-  r.style.setProperty('--player-h', (show ? Math.round(p.offsetHeight) : 0) + 'px');
-}
 function setBare(on, save = true) {
   prefs.bare = !!on; if (save) savePrefs();
   $('#reader').classList.toggle('bare', prefs.bare);
-  const b = $('#rdChrome'); b.setAttribute('aria-pressed', prefs.bare); b.setAttribute('aria-label', prefs.bare ? t('showControls') : t('hideControls'));
   if (prefs.bare) hidePop();
-  syncPlayerHeight();
+  if (prefs.bare) closeSpeedTrack();
 }
-$('#rdChrome').onclick = e => { e.stopPropagation(); setBare(!prefs.bare); hint('bare'); };
 // tap on an empty part of the page toggles the controls; taps on words keep seeking / opening the popover
 let tapSel = '';
 $('#rdScroll').addEventListener('pointerdown', () => { tapSel = String(getSelection() || ''); });
@@ -1774,19 +1766,26 @@ function wordOnLine(x, y) {
 
 /* ------------------------------ modes & playback ------------------------------ */
 function setMode_(m, silent) {
-  S.mode = m;
+  const was = S.mode; S.mode = m;
   $('#dSeg').classList.toggle('listen', m === 'listen');
-  $$('#dSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-  $('#player').classList.toggle('show', m === 'listen');
+  $$('#dSeg button').forEach(b => { b.classList.toggle('on', b.dataset.mode === m); b.setAttribute('aria-selected', b.dataset.mode === m); });
+  if (was && was !== m && !silent) segAnimate(m);
+  setCapState(m, !silent && was !== m);
   $('#rdText').classList.toggle('listening', m === 'listen' && !pagesLive());
   if (m === 'read') { player.stop(); clearListenMarks(); }
   else applyListenMarks();
   positionHL();
   if (!silent) hidePop();
-  requestAnimationFrame(syncPlayerHeight);
-  orbitSync();
+  capSync();
 }
-$('#dSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.mode === 'listen') { unlockAudio(); warmFirst(); } setMode(b.dataset.mode); };
+$('#dSeg').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (capState() === 'speed') { fx('tap'); closeSpeedTrack(); return; } // speed: the orange headphones = back to the controls
+  if (b.dataset.mode === S.mode) return;
+  fx('toggle', true);
+  if (b.dataset.mode === 'listen') { unlockAudio(); warmFirst(); }
+  setMode(b.dataset.mode);
+};
 
 function engine() {
   if (prefs.engine === 'device') return device;
@@ -1805,10 +1804,9 @@ async function syncVoice() {
   // mixed-language books: a sentence in another language gets a voice of that language
   player.voiceFor = l => voiceForLang(l, eng, vs);
   const vo = vs.find(x => x.id === (trOnly() ? voiceForLang(S.book.trTo, eng, vs) : v));
-  $('#pVoice .v').textContent = vo ? vo.name : '—';
-  $('#pVoice .dot').classList.toggle('neural', eng.id === 'neural');
+  S.voiceName = vo ? vo.name : '';
   $('#pSpeed').textContent = fmtRate(prefs.rate);
-  orbitSync();
+  capSync();
   if (biOn()) await setupBilingualVoice(); else player.bilingual = null;
 }
 async function setupBilingualVoice() {
@@ -1849,7 +1847,7 @@ player.on.state = () => {
   if (!player.playing && S.book && S.model && S.curW >= 0) { S.book.pos = placeOf(S.curW); savePos(); } // pause / stop: exact place saved now
   positionHL();
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = player.playing ? 'playing' : 'paused';
-  orbitSync();
+  capSync();
 };
 player.on.end = () => {
   if (S.timer && S.timer.endOfChapter) { stopTimer(true); return; }
@@ -1893,6 +1891,7 @@ player.on.transWord = (s, k) => {
   else if (prefs.pages && !S.touching && Date.now() - S.lastUserScroll > 4000) { const p = pageOfEl(el); if (p !== pageInfo().i) pageTo(p); }
 };
 $('#pPlay').onclick = () => {
+  fx('play', true);
   unlockAudio();
   if (!player.playing && !player.paused) startPlayback(S.curW >= 0 ? S.curW : 0);
   else player.toggle();
@@ -1905,7 +1904,6 @@ player.on.sentence = () => {};
 function renderFocus(force) {
   const f = $('#focus');
   f.classList.toggle('show', !!prefs.focus);
-  $('#pFocus').classList.toggle('on', !!prefs.focus);
   if (!prefs.focus || !S.model) return;
   const s = Math.max(0, S.curS), { sents, words } = S.model;
   if (!force && f.dataset.s === String(s)) return;
@@ -1968,7 +1966,6 @@ function heroWord(w) {
   if (!idle && !REDUCED_MOTION.matches) sp.animate?.([{ transform: 'scale(.9)', opacity: .55 }, { transform: 'none', opacity: 1 }], { duration: 150, easing: 'cubic-bezier(.2,.8,.2,1)' });
 }
 function toggleFocus(on = !prefs.focus) { prefs.focus = on; savePrefs(); renderFocus(true); }
-$('#pFocus').onclick = () => toggleFocus();
 $('#fClose').onclick = () => toggleFocus(false);
 $('#fStage').addEventListener('click', e => {
   const wEl = e.target.closest('[data-fw]');
@@ -2085,7 +2082,7 @@ async function ensureTranslations() {
 function setBilingual(on) {
   if (trOnly()) { delete S.book.trTo; db.set('books', S.book.id, S.book); const w = S.curW; renderSection(w >= 0 ? w : 0, false); }
   prefs.bi = on; savePrefs();
-  $('#rdText').classList.toggle('bi', on); $('#pBi').classList.toggle('on', on);
+  $('#rdText').classList.toggle('bi', on);
   if (on) ensureTranslations(); else { trRun++; player.bilingual = null; }
   $('#rdText').classList.toggle('bi', biOn());
   if (on && prefs.readTr) hint('biVoice', t('hintBiVoice'));
@@ -2095,22 +2092,13 @@ function setBilingual(on) {
   if (prefs.focus) renderFocus(true);
   requestAnimationFrame(() => { positionHL(true); if (S.curW > 0) scrollToWord(S.curW, false); });
 }
-$('#pBi').onclick = () => setBilingual(!prefs.bi);
 
 /* ------------------------------ bookmarks ------------------------------ */
 function curMark() { const b = S.book; if (!b || !S.model) return -1; return (b.marks || []).findIndex(m => { const g = toGlobal(m.sec, m.w); return g >= 0 && S.model.words[g]?.s === S.curS; }); }
-function updateMarkBtn() { $('#rdMark').classList.toggle('on', curMark() >= 0); }
-$('#rdMark').onclick = () => {
-  const b = S.book; b.marks = b.marks || []; const i = curMark();
-  if (i >= 0) { b.marks.splice(i, 1); toast(t('bookmarkRemoved')); }
-  else { addMark(); toast(t('bookmarkAdded')); }
-  savePos(); updateMarkBtn();
-};
-
 function addMark() {
   const b = S.book; b.marks = b.marks || []; const s = Math.max(0, S.curS), w = S.model.sents[s].words[0], L = toLocal(w);
   b.marks.push({ sec: L.sec, w: L.w, text: S.model.sents[s].text.slice(0, 120), at: Date.now(), f: bookProg(L.sec, w).f });
-  b.marks.sort((x, y) => x.sec - y.sec || x.w - y.w); savePos(); updateMarkBtn();
+  b.marks.sort((x, y) => x.sec - y.sec || x.w - y.w); savePos();
 }
 
 /* ------------------------------ navigation sheet: position slider, contents, bookmarks ------------------------------ */
@@ -2191,28 +2179,43 @@ function wireMark(el, repaint) {
   main.addEventListener('touchend', () => { clearTimeout(lp); main.style.transition = ''; if (moved) open(dx < -40 || (el.classList.contains('open') && dx > -10 && dx < 10)); x0 = null; });
   main.addEventListener('contextmenu', e => { e.preventDefault(); open(true); });
   main.onclick = () => { if (moved) return; if (el.classList.contains('open')) return open(false); const m = S.book.marks[i]; closeSheet(); jumpTo(m.sec, 0, m.w); };
-  el.querySelector('.mk-del').onclick = e => { e.stopPropagation(); S.book.marks.splice(i, 1); savePos(); updateMarkBtn(); toast(t('bookmarkRemoved')); repaint(); };
+  el.querySelector('.mk-del').onclick = e => { e.stopPropagation(); S.book.marks.splice(i, 1); savePos(); toast(t('bookmarkRemoved')); repaint(); };
 }
 
 /* ------------------------------ more sheet ------------------------------ */
 $('#rdMore').onclick = () => {
+  // «⋯» = reading & voice: every mode and voice option lives here and nowhere else (1.7.0)
   const b = S.book;
   const langs = TR_LANGS.filter(l => l !== b.lang).map(l => `<option value="${l}" ${l === biTarget() ? 'selected' : ''}>${esc(langName(l, uiLang()))}</option>`).join('');
+  const sw = (k, on, ic, name, hint = '') => `<div class="row" data-tg="${k}"><div class="ic">${ic}</div><div class="tx"><b>${name}</b>${hint ? `<small>${hint}</small>` : ''}</div><i class="sw ${on ? 'on' : ''}"></i></div>`;
   openSheet(`<div class="sh-title">${t('readingVoice')}<button class="x" data-close>${ICON.x}</button></div>
-    <div class="row" style="cursor:default;align-items:center"><div class="ic">${ICON.tr}</div><div class="tx"><b>${t('translateTo')}</b></div><select id="biTo" class="row-select" aria-label="${t('translateTo')}">${langs}</select></div>
-    <div class="row" data-tg="both"><div class="ic">${ICON.headph}</div><div class="tx"><b>${t('readTr')}</b><small>${t('readTrHint')}</small></div><i class="sw ${prefs.readTr ? 'on' : ''}"></i></div>
-    <div class="row" data-tg="followHl"><div class="ic">${ICON.follow}</div><div class="tx"><b>${t('followHl')}</b><small>${t('followHlHint')}</small></div><i class="sw ${followOn() ? 'on' : ''}"></i></div>
-    <div class="row" data-tg="skip"><div class="ic">${ICON.wand}</div><div class="tx"><b>${t('skipFiller')}</b><small>${t('skipFillerHint')}</small></div><i class="sw ${prefs.skip ? 'on' : ''}"></i></div>
+    <div class="row" data-a="voice"><div class="ic">${ICON.mic}</div><div class="tx"><b>${t('voice')}</b><small id="mVoice">${esc(S.voiceName || '—')}</small></div>${ICON.chev}</div>
+    ${sw('bi', prefs.bi, ICON.tr, t('translationT'))}
+    <div class="bi-sub ${prefs.bi ? '' : 'off'}" id="biSub"><div>
+    <div class="row sub" style="cursor:default;align-items:center"><div class="tx"><b>${t('translateTo')}</b></div><select id="biTo" class="row-select" aria-label="${t('translateTo')}">${langs}</select></div>
+    ${sw('both', prefs.readTr, ICON.headph, t('readTr'), t('readTrHint'))}
+    </div></div>
+    ${sw('focus', prefs.focus, ICON.focus, t('focusT'))}
+    ${sw('pages', prefs.pages, ICON.colpages, t('pagesMode'), t('pagesHint'))}
+    ${sw('followHl', followOn(), ICON.follow, t('followHl'), t('followHlHint'))}
+    ${sw('skip', prefs.skip, ICON.wand, t('skipFiller'), t('skipFillerHint'))}
+    ${sw('uiSound', prefs.uiSound !== false, ICON.sound, t('uiSoundT'))}
+    ${sw('haptics', prefs.haptics !== false, ICON.vib, t('hapticsT'))}
     <div class="app-ver" id="appVer">Murmur ${APP_VERSION}</div>
 `, body => {
+    body.querySelector('[data-a=voice]').onclick = () => openVoices();
     body.querySelectorAll('[data-tg]').forEach(r => r.onclick = () => {
       const k = r.dataset.tg, sw = r.querySelector('.sw');
-      if (k === 'focus') { toggleFocus(); sw.classList.toggle('on', prefs.focus); }
       if (k === 'bi') { setBilingual(!prefs.bi); sw.classList.toggle('on', prefs.bi); }
-      if (k === 'both') { prefs.readTr = !prefs.readTr; savePrefs(); sw.classList.toggle('on', prefs.readTr); if (prefs.readTr && !prefs.bi) { setBilingual(true); } else { const wp = player.playing; setupBilingualVoice().then(() => { if (wp && player.playing) player.play(S.curW); }); } }
+      if (k === 'both') { prefs.readTr = !prefs.readTr; savePrefs(); sw.classList.toggle('on', prefs.readTr); if (prefs.readTr && !prefs.bi) { setBilingual(true); body.querySelector('[data-tg=bi] .sw').classList.add('on'); } else { const wp = player.playing; setupBilingualVoice().then(() => { if (wp && player.playing) player.play(S.curW); }); } }
+      if (k === 'focus') { toggleFocus(); sw.classList.toggle('on', prefs.focus); }
       if (k === 'pages') { setPages(!prefs.pages); sw.classList.toggle('on', prefs.pages); }
       if (k === 'followHl') { prefs.followHl = !followOn(); savePrefs(); sw.classList.toggle('on', followOn()); }
       if (k === 'skip') { prefs.skip = !prefs.skip; savePrefs(); sw.classList.toggle('on', prefs.skip); const w = S.curW; player.stop(); renderSection(w); }
+      if (k === 'uiSound') { prefs.uiSound = prefs.uiSound === false; savePrefs(); sw.classList.toggle('on', prefs.uiSound); }
+      if (k === 'haptics') { prefs.haptics = prefs.haptics === false; savePrefs(); sw.classList.toggle('on', prefs.haptics); }
+      body.querySelector('#biSub').classList.toggle('off', !prefs.bi);
+      fx('tap', k === 'haptics' && prefs.haptics);
     });
     body.querySelector('#biTo').onchange = async e => { const wp = player.playing, w = S.curW; prefs.biTo = e.target.value; savePrefs(); renderSection(w, false); if (prefs.bi) ensureTranslations(); await S.voiceReady; if (wp) startPlayback(Math.max(0, S.curW)); };
   });
@@ -2222,6 +2225,8 @@ $('#rdMore').onclick = () => {
 function openLook(focus) {
   const pct = (v, a, b) => ((v - a) / (b - a) * 100) + '%';
   openSheet(`<div class="sh-title">${t('textT')}<button class="x" data-close>${ICON.x}</button></div>
+    <div class="sh-label">${t('theme')}</div>
+    <div class="themes">${THEMES.map(th => `<button class="theme-sw ${prefs.theme === th ? 'on' : ''}" data-t="${th}"><b>Aa</b>${t(th)}</button>`).join('')}</div>
     <div class="sh-label">${t('brightness')}</div>
     <div class="range-row"><svg viewBox="0 0 24 24" style="width:18px;opacity:.6"><circle cx="12" cy="12" r="4"/></svg><input type="range" id="rgDim" min="0" max="0.55" step="0.01" value="${0.55 - prefs.dim}" style="--p:${pct(0.55 - prefs.dim, 0, .55)}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></div>
     <div class="sh-label" id="lblSize">${t('textSize')}</div>
@@ -2235,6 +2240,7 @@ function openLook(focus) {
     <div class="segs" id="sgAl"><button data-v="justify">${t('justify')}</button><button data-v="left">${t('alignLeft')}</button></div>`, body => {
     const mark = () => { body.querySelectorAll('#sgFont button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.font)); body.querySelectorAll('#sgLh button').forEach(b => b.classList.toggle('on', +b.dataset.v === +prefs.lh)); body.querySelectorAll('#sgAl button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.align)); };
     mark();
+    body.querySelectorAll('.theme-sw').forEach(b => b.onclick = () => { fx('tap'); prefs.theme = b.dataset.t; savePrefs(); applyLook(); body.querySelectorAll('.theme-sw').forEach(x => x.classList.toggle('on', x === b)); });
     const fs = body.querySelector('#rgFs');
     const setFs = v => { prefs.fs = Math.max(FS_MIN, Math.min(FS_MAX, Math.round(v))); fs.value = prefs.fs; fs.style.setProperty('--p', pct(prefs.fs, FS_MIN, FS_MAX)); body.querySelector('#fsVal').textContent = prefs.fs; { const near = FS_STEPS.reduce((a, v) => Math.abs(v - prefs.fs) < Math.abs(a - prefs.fs) ? v : a); body.querySelectorAll('#fsSteps button').forEach(b => b.classList.toggle('on', +b.dataset.v === near)); } savePrefs(); applyLook(); keepWordInView(); };
     fs.oninput = () => setFs(+fs.value);
@@ -2246,7 +2252,6 @@ function openLook(focus) {
     body.querySelector('#sgLh').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.lh = +b.dataset.v; savePrefs(); applyLook(); mark(); keepWordInView(); };
   });
 }
-$('#dBright').onclick = () => openLook('theme');
 $('#dFont').onclick = () => openLook('size');
 
 /* ------------------------------ sleep timer ------------------------------ */
@@ -2276,10 +2281,10 @@ function setTimer(v) {
 function stopTimer(fired) { clearInterval(S.timer?.iv); S.timer = null; player.pause(); player.setVolume(1); renderTimer(); if (fired) toast(t('timerDone')); }
 function renderTimer() {
   const el = $('#dTimerTxt'), btn = $('#dTimer');
-  if (!S.timer) { el.textContent = t('timer'); btn.classList.remove('active'); orbitSync(); return; }
-  btn.classList.add('active');
+  if (!S.timer) { el.textContent = t('timer'); btn.classList.remove('on'); capSync(); return; }
+  btn.classList.add('on');
   el.textContent = S.timer.endOfChapter ? '§ ' + (S.sec + 1) : fmtClock(Math.max(0, (S.timer.end - Date.now()) / 1000));
-  orbitSync();
+  capSync();
 }
 $('#dTimer').onclick = openTimer;
 
@@ -2409,21 +2414,6 @@ function previewVoice(id, lang, btn) {
     if (p && p.catch) p.catch(err => { if (my !== PV.token) return; console.warn('preview', err); toast(t('previewFail')); done(); });
   }).catch(err => { if (my !== PV.token) return; console.warn('preview', err); toast(t('previewFail')); done(); });
 }
-$('#pVoice').onclick = openVoices;
-function openSpeed() {
-  const presets = [0.75, 1, 1.25, 1.5, 2, 2.5, 3];
-  openSheet(`<div class="sh-title">${t('speed')}<button class="x" data-close>${ICON.x}</button></div>
-    <div class="speed-big" id="spVal">${fmtRate(prefs.rate)}</div>
-    <div class="range-row"><span class="lbl" style="font-size:13px">0.5</span><input type="range" id="rgSp" min="0.5" max="3" step="0.05" value="${prefs.rate}" style="--p:${(prefs.rate - .5) / 2.5 * 100}%"><span class="lbl" style="font-size:13px">3</span></div>
-    <div class="presets">${presets.map(p => `<button data-v="${p}" class="${p === prefs.rate ? 'on' : ''}">${p}×</button>`).join('')}</div>`, body => {
-    const rg = body.querySelector('#rgSp');
-    const set = v => { v = Math.round(v * 20) / 20; prefs.rate = v; savePrefs(); rg.value = v; rg.style.setProperty('--p', (v - .5) / 2.5 * 100 + '%'); body.querySelector('#spVal').textContent = fmtRate(v); body.querySelectorAll('.presets button').forEach(b => b.classList.toggle('on', +b.dataset.v === v)); $('#pSpeed').textContent = fmtRate(v); };
-    rg.oninput = () => set(+rg.value);
-    rg.onchange = () => { player.setRate(prefs.rate); updateProgress(); };
-    body.querySelector('.presets').onclick = e => { const b = e.target.closest('button'); if (!b) return; set(+b.dataset.v); player.setRate(prefs.rate); updateProgress(); };
-  });
-}
-$('#pSpeed').onclick = openSpeed;
 
 /* ------------------------------ quotes ------------------------------ */
 async function saveQuote(text) {
@@ -2542,9 +2532,6 @@ function watchRelay() {
 }
 async function boot() {
   applyLook(); applyI18n();
-  const pl = $('#player'); if (pl && window.ResizeObserver && !pl._phRO) { pl._phRO = new ResizeObserver(() => syncPlayerHeight()); pl._phRO.observe(pl); }
-  addEventListener('resize', syncPlayerHeight);
-  syncPlayerHeight();
   syncViewport();
   history.replaceState({ screen: 'library' }, '');
   await loadBooks(); renderLibrary();
@@ -2556,7 +2543,6 @@ async function boot() {
   watchRelay();
   checkRelay().then(() => { if (S.book) syncVoice(); });
   device.voices().then(v => { S.deviceVoices = v; });
-  $('#pFocus').classList.toggle('on', !!prefs.focus); $('#pBi').classList.toggle('on', !!prefs.bi);
   setupUpdates();
 }
 /* ------------------------------ updates ------------------------------ */
@@ -2596,248 +2582,132 @@ function reloadWhenIdle(ver) {
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
 
-/* ------------------------------ orbit: round player + hold-for-orbits menu (1.6.2) ------------------------------ */
-// The reading view shows only the orb. Tap = play / pause. Hold = the orbits: inner ring (modes), outer ring (speed,
-// theme, text, more). Options apply in place and the menu stays; tap the text (or the orb) to go back to reading.
-// Speed opens an arc slider on the same orbit.
-const SPD_TICKS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]; // the speed orbit snaps hard to these (1.6.2)
+/* ------------------------------ capsule player (1.7.0) ------------------------------ */
+// One floating capsule: Read = toggle · «Чтение · стр. X из Y» · Aa · ⋯ ; Listen = toggle · ‹‹ ▶ ›› · speed · timer ;
+// tapping the speed chip turns the capsule into a snapping speed track. Every setting has exactly one home.
+const CAP_BAND = 96; // capsule 64 + 18 from the bottom (+ safe area) + 14 clear above it
+const SPD_TICKS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 const THEMES = ['paper', 'sepia', 'night'];
-function orbitSync() {
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const EASE_OUT = 'cubic-bezier(.22,1,.36,1)', SPRING = 'cubic-bezier(.34,1.42,.5,1)';
+/* --- premium UI feedback: a soft synthesized «thock» + system haptic --- */
+let fxCtx = null, fxIdle = 0;
+function fxSound(kind = 'tap') {
+  if (prefs.uiSound === false) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    if (!fxCtx) fxCtx = new AC({ latencyHint: 'interactive' });
+    if (fxCtx.state === 'suspended') fxCtx.resume().catch(() => {});
+    const c = fxCtx, t0 = c.currentTime + 0.005;
+    const P = { tap: [180, 120, 0.045, 0.05], toggle: [150, 92, 0.06, 0.06], play: [210, 130, 0.055, 0.06], tick: [520, 360, 0.022, 0.03] }[kind] || [180, 120, 0.045, 0.05];
+    const [f0, f1, dur, vol] = P;
+    const o = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter();
+    o.type = 'sine'; o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    lp.type = 'lowpass'; lp.frequency.value = kind === 'tick' ? 2400 : 1400;
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(lp); lp.connect(g); g.connect(c.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+    // let the audio session go again soon after the last tap, so the context never holds it against the voice
+    clearTimeout(fxIdle); fxIdle = setTimeout(() => { try { fxCtx && fxCtx.state === 'running' && fxCtx.suspend(); } catch {} }, 1200);
+  } catch {}
+}
+function fxHaptic() {
+  if (prefs.haptics === false) return;
+  if (navigator.vibrate) { try { navigator.vibrate(8); } catch {} return; }
+  // iOS 18+: toggling a native <input switch> through its label fires the system haptic (no vibrate API in Safari)
+  try { $('#haptIn')?.parentElement.click(); } catch {}
+}
+const fx = (kind = 'tap', haptic = false) => { fxSound(kind); if (haptic) fxHaptic(); };
+/* --- state --- */
+function capState() { return $('#dock')?.dataset.st || 'read'; }
+function setCapState(st, anim = true) {
+  const d = $('#dock'); if (!d) return; const from = d.dataset.st; if (from === st) return;
+  if (st !== 'speed') S.spdOpen = false;
+  if (from === 'speed' && st === 'read') { /* leave speed straight to read */ }
+  if (st === 'speed') { spdLayout(true); void $('#spdNums').offsetWidth; } // build ticks first, flush, then switch state so the numbers stagger in
+  d.dataset.st = st;
+  if (anim && !reduceMotion()) {
+    $('#capBg').animate([{ transform: 'scale(1)' }, { transform: 'scale(1.025,1.06)', offset: .4 }, { transform: 'scale(1)' }], { duration: 420, easing: EASE_OUT });
+  }
+}
+function capSync() {
   const rd = $('#reader'); if (!rd || !S.model || !S.book) return;
   rd.classList.toggle('lm', S.mode === 'listen');
-  const bp = bookProg();
-  const pr = $('#oRingPr'); if (pr) pr.style.strokeDasharray = `${Math.max(0.4, bp.f * 100).toFixed(2)} 100`;
   $('#pPlay').setAttribute('aria-label', player.playing ? 'Pause' : 'Play');
-  if (arcOpen()) arcStatus();
+  const pg = prefs.pages ? pageInfo() : null;
+  let txt;
+  if (pg) txt = `${t('pageShort')} ${pg.i + 1} ${t('ofT')} ${pg.n}`;
+  else { const tot = Math.max(1, Math.round(secWords().reduce((a, x) => a + x, 0) / 260)); txt = `${t('pageShort')} ${Math.min(tot, Math.floor(bookProg().f * tot) + 1)} ${t('ofT')} ${tot}`; }
+  const el = $('#cInfoS'); if (el && el.textContent !== txt) el.textContent = txt;
+  $('#pSpeed').textContent = fmtRate(prefs.rate);
 }
-const voiceShort = () => { const v = ($('#pVoice .v')?.textContent || '').trim(); return v && v !== '—' ? v.split(/[ ,(]/)[0] : '—'; };
-function arcStatus() {
-  const el = $('#arcSt'); if (!el || !S.model) return;
-  if (S.mode !== 'listen') { el.textContent = t('orbitHint'); return; }
-  const n = S.model.sents.length, s = Math.max(0, S.curS), bp = bookProg();
-  const tm = S.timer ? ' · ☾ ' + ($('#dTimerTxt')?.textContent || '') : '';
-  el.textContent = `${t('sentenceN').replace('{a}', s + 1).replace('{b}', n)} · ${voiceShort()} · ${t('leftT')} ${fmtLeft(bp.left).replace('~', '')}${tm}`;
+/* --- the toggle: spring slide with a small gooey stretch, icon pop --- */
+function segX() { const bs = $$('#dSeg button'); return bs.length > 1 ? bs[1].offsetLeft - bs[0].offsetLeft : 0; }
+function segAnimate(to) {
+  const k = $('#segKnob'); if (!k || reduceMotion()) return;
+  const X = segX(), x1 = to === 'listen' ? X : 0, x0 = X - x1;
+  // transform-only WAAPI (compositor): spring slide, the mid frame stretches toward the direction of travel
+  k.animate([
+    { transform: `translateX(${x0}px) scaleX(1)` },
+    { transform: `translateX(${(x0 + x1) / 2 + (x1 > x0 ? 3 : -3)}px) scale(1.3,.9)`, offset: .42 },
+    { transform: `translateX(${x1}px) scaleX(1)` }
+  ], { duration: 440, easing: SPRING });
+  const ic = $(`#dSeg button[data-mode=${to}] svg`);
+  ic && ic.animate([{ transform: 'scale(.6) rotate(-24deg)', opacity: .4 }, { transform: 'scale(1.12) rotate(4deg)', opacity: 1, offset: .6 }, { transform: 'none', opacity: 1 }], { duration: 420, easing: EASE_OUT });
 }
-function arcGeo() {
-  const rd = $('#reader'), rr = rd.getBoundingClientRect(), orb = $('#pPlay').getBoundingClientRect();
-  const W = rr.width, cx = orb.left + orb.width / 2 - rr.left, cy = orb.top + orb.height / 2 - rr.top;
-  const R1 = Math.min(160, Math.round(W * 0.41)), R2 = R1 + 108;
-  return { W, H: rr.height, cx, cy, R1, R2, RS: Math.round((R1 + R2) / 2), rr };
-}
-const polar = (g, r, deg) => { const a = deg * Math.PI / 180; return [g.cx + r * Math.cos(a), g.cy + r * Math.sin(a)]; };
-const IC = {
-  voice: '<svg viewBox="0 0 24 24"><path d="M12 3a3.5 3.5 0 0 1 3.5 3.5v5a3.5 3.5 0 0 1-7 0v-5A3.5 3.5 0 0 1 12 3zM5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/></svg>',
-  timer: '<svg viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></svg>',
-  focus: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>',
-  pages: '<svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>',
-  speed: '<svg viewBox="0 0 24 24"><path d="M4.5 16.5a8 8 0 1 1 15 0M12 13l4-5"/></svg>',
-  sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>',
-  more: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>',
-  prev: '<svg viewBox="0 0 24 24"><path d="M11 7l-5 5 5 5M18 7l-5 5 5 5"/></svg>',
-  next: '<svg viewBox="0 0 24 24"><path d="M13 7l5 5-5 5M6 7l5 5-5 5"/></svg>',
-  stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" style="fill:currentColor;stroke:none"/></svg>',
-  back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>'
-};
-function arcInner() { // state = the circle itself (orange = on); sub-labels only for real values, never on/off (1.6.2)
-  return [
-    { k: 'voice', n: t('voice'), v: voiceShort() === '—' ? '' : voiceShort(), ic: IC.voice },
-    { k: 'timer', n: t('sleepTimer'), v: S.timer ? ($('#dTimerTxt')?.textContent || '') : '', on: !!S.timer, ic: IC.timer },
-    { k: 'tr', n: t('translationT'), v: '', on: !!prefs.bi, ic: ICON.tr },
-    { k: 'focus', n: t('focusT'), v: '', on: !!prefs.focus, ic: IC.focus },
-    { k: 'pages', n: t('pagesMode'), v: prefs.pages ? t('pagesSide') : t('pagesScroll'), on: !!prefs.pages, ic: IC.pages }
-  ];
-}
-function arcOuter() {
-  return [ // «Ещё» lives in the top bar (⋯), not here — one place per setting
-    { k: 'speed', v: fmtRate(prefs.rate), ic: IC.speed, n: t('speed') },
-    { k: 'theme', v: t(prefs.theme), ic: '', n: t('theme') },
-    { k: 'text', v: `Aa ${prefs.fs}`, ic: '', n: t('textSize') }
-  ];
-}
-// collision-free layout (1.6.2): every circle, label and chip keeps >= GAP px from every other one and from the edges
-const ARC_GAP = 8;
-const rOver = (a, b, g) => a.l < b.r + g && b.l < a.r + g && a.t < b.b + g && b.t < a.b + g;
-const rAt = (x, y, w, h) => ({ l: x - w / 2, t: y - h / 2, r: x + w / 2, b: y + h / 2 });
-function arcLayout(g, top, inner, outer) {
-  // 1.6.2: an orderly layout. Inner circles climb an elliptic arc in even vertical steps, each with its label on the
-  // same side (left) at the same distance; the outer chips sit evenly spaced on a wider arc. Everything keeps ARC_GAP.
-  const E = 8, bottom = g.H - 8, CR = 25, LG = 8, n = inner.length, bad = [];
-  const orbR = { l: g.cx - 62, t: g.cy - 62, r: g.cx + 62, b: g.cy + 62 };
-  const V = g.cy - top, chipH = Math.max(...outer.map(o => o.h));
-  const step = Math.max(58, Math.min(64, (V - chipH - 2 * ARC_GAP - 24) / (n - 1 + 1.4)));
-  const ryE = (n - 1) * step / 0.97;
-  const wmax = Math.max(...inner.map(it => it.w));
-  const rx = Math.max(96, Math.min(150, g.cx - CR - LG - wmax - E - 2));
-  const circ = [], lab = [], placed = [];
-  inner.forEach((it, i) => {
-    const y = g.cy - i * step, k = Math.sqrt(Math.max(0, 1 - Math.pow(i * step / ryE, 2))), x = g.cx - rx * k;
-    const rc = rAt(x, y, 2 * CR, 2 * CR); circ.push({ x, y, rc });
-    const lr = { l: x - CR - LG - it.w, r: x - CR - LG, t: y - it.h / 2, b: y + it.h / 2 }; lab.push(lr);
-    placed.push(rc, lr);
-  });
-  const ok = rc => rc.l >= E && rc.r <= g.W - E && rc.t >= top && rc.b <= bottom && !rOver(rc, orbR, 6) && !placed.some(p => rOver(rc, p, ARC_GAP));
-  let chips = null, R2x = rx + 110, R2y = ryE + 100;
-  search: for (const dy of [100, 112, 88, 124, 76, 136]) for (const dx of [110, 124, 96, 140, 82]) for (let a0 = 236; a0 >= 200; a0 -= 2) {
-    const rx2 = rx + dx, ry2 = Math.min(ryE + dy, V - chipH / 2 - 2), m = outer.length, got = [];
-    for (let j = 0; j < m; j++) {
-      const a = (a0 + (270 - a0) * j / (m - 1)) * Math.PI / 180;
-      const rc = rAt(g.cx + rx2 * Math.cos(a), g.cy + ry2 * Math.sin(a), outer[j].w, outer[j].h);
-      if (!ok(rc) || got.some(p => rOver(rc, p, ARC_GAP))) break;
-      got.push(rc);
-    }
-    if (got.length === m) { chips = got; R2x = rx2; R2y = ry2; break search; }
+/* --- speed track --- */
+const spdI = v => { let b = 0; SPD_TICKS.forEach((x, i) => { if (Math.abs(x - v) < Math.abs(SPD_TICKS[b] - v)) b = i; }); return b; };
+function spdGeo() { const tr = $('#spd'); const w = tr.clientWidth, pad = 26; return { w, pad, step: (w - 2 * pad) / (SPD_TICKS.length - 1) }; }
+function spdLayout(build) {
+  const g = spdGeo(); if (!g.w) return;
+  if (build || !$('#spdTk').children.length) {
+    $('#spdTk').innerHTML = SPD_TICKS.map((v, i) => `<i style="left:${(g.pad + i * g.step).toFixed(1)}px"></i>`).join('');
+    const tr = $('#spd').getBoundingClientRect(), dk = $('#dock').getBoundingClientRect(), off = tr.left - dk.left;
+    const nl = off + g.pad, nr = off + g.pad + (SPD_TICKS.length - 1) * g.step;
+    $('#spdNums').style.setProperty('--nl', (nl - 27).toFixed(1) + 'px'); $('#spdNums').style.setProperty('--nw', (nr - nl + 45).toFixed(1) + 'px');
+    $('#spdNums').innerHTML = SPD_TICKS.map((v, i) => `<span style="left:${(off + g.pad + i * g.step).toFixed(1)}px;--i:${i}" data-i="${i}">${String(v)}</span>`).join('');
   }
-  if (!chips) { bad.push('chips'); chips = outer.map((o, j) => { const a = (220 + 25 * j) * Math.PI / 180; return rAt(g.cx + R2x * Math.cos(a), g.cy + R2y * Math.sin(a), o.w, o.h); }); }
-  inner.forEach((it, i) => { const r = lab[i]; if (r.l < E || r.t < top) bad.push(it.k); });
-  return { R1: rx, R1y: ryE, R2: R2x, R2y, circ, lab, chips, bad };
+  spdPaint(S.spdV ?? prefs.rate, false);
 }
-function renderArc() {
-  const m = $('#arcm'), box = $('#arcItems'); if (!m || !box) return;
-  const g = arcGeo(), sp = m.classList.contains('spd'), lm = S.mode === 'listen';
-  let h = '', head = '';
-  if (sp) {
-    head = ''; // 1.6.2: the back / reset chips sit by the arc start, nothing over the page header
-  } else {
-    head = ''; // 1.6.2 (t170u): no title, status line or transport row — just the orbits
+function spdPaint(v, anim = true) {
+  const g = spdGeo(), i = spdI(v), x = g.pad + i * g.step;
+  const kn = $('#spdKn'), fl = $('#spdFl');
+  kn.style.transition = anim && !reduceMotion() ? '' : 'none';
+  kn.style.transform = `translateX(${x.toFixed(1)}px)`; S.spdKx = x;
+  fl.style.transition = kn.style.transition;
+  fl.style.transform = `scaleX(${((x - g.pad) / Math.max(1, g.w - 2 * g.pad)).toFixed(4)})`;
+  $('#spdV').textContent = fmtRate(SPD_TICKS[i]);
+  $$('#spdTk i').forEach((e, j) => e.classList.toggle('on', j <= i));
+  $$('#spdNums span').forEach((e, j) => e.classList.toggle('cur', j === i));
+  $('#spd').setAttribute('aria-valuenow', SPD_TICKS[i]);
+  if (!anim) requestAnimationFrame(() => { kn.style.transition = fl.style.transition = ''; });
+}
+function setRateNow(v) { prefs.rate = v; savePrefs(); player.setRate(v); updateProgress(); }
+function openSpeedTrack() {
+  S.spdV = prefs.rate; setCapState('speed'); hidePop();
+  if (!reduceMotion()) {
+    const ch = $('#pSpeed').getBoundingClientRect(), kn = $('#spdKn'), kr = kn.getBoundingClientRect(), x = S.spdKx || 0;
+    const dx = (ch.left + ch.width / 2) - (kr.left + kr.width / 2);
+    kn.animate([{ transform: `translateX(${(x + dx).toFixed(1)}px) scale(.92)` }, { transform: `translateX(${x.toFixed(1)}px)` }], { duration: 480, easing: SPRING });
   }
-  $('#arcTtl').innerHTML = head;
-  m.style.setProperty('--ox', g.cx.toFixed(0) + 'px'); m.style.setProperty('--oy', g.cy.toFixed(0) + 'px'); m.style.setProperty('--dr', Math.round(Math.max(g.R2 + 150, Math.min(g.cy, g.cx) * 1.05)) + 'px');
-  const card = $('#arcTtl .arc-row') || $('#reader .rd-bar'), top = card ? card.getBoundingClientRect().bottom - g.rr.top + ARC_GAP + 4 : 140;
-  const t1 = m.querySelector('.a1'), t2 = m.querySelector('.a2');
-  const ring = (el, R, Ry = R) => Object.assign(el.style, { left: g.cx - R + 'px', top: g.cy - Ry + 'px', width: 2 * R + 'px', height: 2 * Ry + 'px' });
-  if (sp) {
-    const RS = g.RS, [x0, y0] = polar(g, RS, SP_A0), [x1, y1] = polar(g, RS, 270);
-    h = `<svg class="arc-sl" style="width:${g.W}px;height:${g.H}px" viewBox="0 0 ${g.W} ${g.H}"><path class="tr" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${RS} ${RS} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}"/>
-      <path class="fl" id="spFill" d=""/>${SPD_TICKS.map(v => { const a = spAngle(v), [ax, ay] = polar(g, RS - 7, a), [bx, by] = polar(g, RS + 7, a); return `<line class="tk" x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}"/>`; }).join('')}<circle class="kn" id="spKnob" r="14" cx="0" cy="0"/></svg>`;
-    // every number at the same radial offset just outside the arc, centred on its tick
-    h += SPD_TICKS.map(v => { const [lx, ly] = polar(g, RS + 30, spAngle(v)); return `<span class="sk" style="left:${lx.toFixed(1)}px;top:${ly.toFixed(1)}px">${v}</span>`; }).join('');
-    h += `<span class="spk" id="spv"></span>`;
-    h += `<div class="sp-ctl" style="left:${x0.toFixed(0)}px;top:${(g.cy + 14).toFixed(0)}px"><button class="ach" data-k="orbits" aria-label="${t('orbitsT')}">${IC.back}</button><button class="ach" data-k="rate1">1×</button></div>`;
-    box.innerHTML = h; spPaint(prefs.rate); return;
-  }
-  // measure, then place
-  const inner = arcInner(), outer = arcOuter();
-  box.innerHTML = inner.map(it => `<div class="rl"><b>${esc(it.n)}</b>${it.v ? `<span>${esc(it.v)}</span>` : ''}</div>`).join('') + inner.map(it => `<div class="rl"><b>${esc(it.n)}</b></div>`).join('') +
-    outer.map(it => `<button class="ch ${it.k === 'speed' ? 'acc' : ''}">${it.ic}<span>${esc(it.v)}</span></button>`).join('');
-  const ms = [...box.children].map(el => [el.offsetWidth, el.offsetHeight]);
-  inner.forEach((it, i) => { [it.w, it.h] = ms[i]; [it.w1, it.h1] = ms[inner.length + i]; });
-  outer.forEach((it, i) => { [it.w, it.h] = ms[2 * inner.length + i]; });
-  const L = arcLayout(g, top, inner, outer);
-  inner.forEach((it, i) => {
-    const c = L.circ[i], r = L.lab[i];
-    h += `<button class="rb ${it.on ? 'on' : ''}" data-k="${it.k}" style="left:${(c.x - 25).toFixed(0)}px;top:${(c.y - 25).toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}</button>`;
-    h += `<div class="rl" data-for="${it.k}" style="left:${r.l.toFixed(0)}px;top:${r.t.toFixed(0)}px"><b>${esc(it.n)}</b>${it.v ? `<span>${esc(it.v)}</span>` : ''}</div>`;
-  });
-  outer.forEach((it, i) => { const r = L.chips[i];
-    h += `<button class="ch ${it.k === 'speed' ? 'acc' : ''}" data-k="${it.k}" style="left:${r.l.toFixed(0)}px;top:${r.t.toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}<span>${esc(it.v)}</span></button>`; });
-  box.innerHTML = h; m.dataset.bad = L.bad.join(',');
-  ring(t1, L.R1, L.R1y); ring(t2, L.R2, L.R2y);
 }
-function openArc(speed = false) {
-  const rd = $('#reader'), m = $('#arcm'); if (!rd || !m) return;
-  hidePop(); $('#coach')?.classList.remove('show');
-  prefs.hints = prefs.hints || {}; if (!prefs.hints.orbit || !prefs.hints.orbit2) { prefs.hints.orbit = prefs.hints.orbit2 = 1; savePrefs(); }
-  m.classList.toggle('spd', !!speed);
-  renderArc();
-  m.classList.add('show'); m.setAttribute('aria-hidden', 'false'); rd.classList.add('arc-on');
-  navigator.vibrate?.(10);
-}
-function closeArc() { const m = $('#arcm'); if (!m) return; m.classList.remove('show', 'spd'); m.setAttribute('aria-hidden', 'true'); $('#reader').classList.remove('arc-on'); $$('#arcm .hov').forEach(x => x.classList.remove('hov')); }
-const arcOpen = () => !!$('#arcm')?.classList.contains('show');
-/* speed slider on the orbit */
-// ticks are spread evenly over the quarter orbit; an off-tick saved rate sits between its neighbours
-const SP_A0 = 194; // the speed arc runs from just above the orb's left to straight up
-function spAngle(v) {
-  const T = SPD_TICKS, n = T.length - 1, span = 270 - SP_A0;
-  if (v <= T[0]) return SP_A0; if (v >= T[n]) return 270;
-  const i = T.findIndex((x, j) => v >= x && v <= T[j + 1]);
-  return SP_A0 + (i + (v - T[i]) / (T[i + 1] - T[i])) * span / n;
-}
-function spValue(deg) {
-  const n = SPD_TICKS.length - 1, f = (Math.max(SP_A0, Math.min(270, deg)) - SP_A0) / (270 - SP_A0) * n;
-  return SPD_TICKS[Math.round(f)];
-}
-function spPaint(v) {
-  const g = arcGeo(), a = spAngle(v), [x0, y0] = polar(g, g.RS, SP_A0), [kx, ky] = polar(g, g.RS, a);
-  const f = $('#spFill'), k = $('#spKnob'); if (!f || !k) return;
-  f.setAttribute('d', a > SP_A0 + 0.2 ? `M${x0.toFixed(1)} ${y0.toFixed(1)} A${g.RS} ${g.RS} 0 0 1 ${kx.toFixed(1)} ${ky.toFixed(1)}` : '');
-  k.setAttribute('cx', kx.toFixed(1)); k.setAttribute('cy', ky.toFixed(1));
-  const sv = $('#spv'); if (sv) { const [px, py] = polar(g, g.RS - 40, a); sv.textContent = fmtRate(v); sv.style.left = px.toFixed(0) + 'px'; sv.style.top = py.toFixed(0) + 'px'; }
-}
-function setRateNow(v) {
-  prefs.rate = v; savePrefs(); player.setRate(v); $('#pSpeed').textContent = fmtRate(v); updateProgress();
-}
-function arcAct(el) {
-  if (!el) return;
-  const k = el.dataset.k;
-  if (k === 'voice') return openVoices();
-  if (k === 'timer') return openTimer();
-  if (k === 'text') return openLook('size');
-  if (k === 'more') return $('#rdMore').onclick();
-  if (k === 'speed') { $('#arcm').classList.add('spd'); renderArc(); return; }
-  if (k === 'orbits') { $('#arcm').classList.remove('spd'); renderArc(); return; }
-  if (k === 'rate1') { setRateNow(1); spPaint(1); return; }
-  if (k === 'prev' || k === 'next') { S.lastUserScroll = 0; player.skip(k === 'prev' ? -1 : 1); return; }
-  if (k === 'stop') { setMode('read'); renderArc(); return; }
-  if (k === 'tr') setBilingual(!prefs.bi);
-  if (k === 'focus') toggleFocus();
-  if (k === 'pages') setPages(!prefs.pages);
-  if (k === 'theme') { prefs.theme = THEMES[(THEMES.indexOf(prefs.theme) + 1) % 3]; savePrefs(); applyLook(); }
-  requestAnimationFrame(() => arcOpen() && renderArc());
-}
-const arcAt = (x, y) => document.elementFromPoint(x, y)?.closest('#arcm [data-k]');
+function closeSpeedTrack() { if (capState() === 'speed') setCapState(S.mode === 'listen' ? 'listen' : 'read'); }
 (() => {
-  const orb = $('#pPlay'), m = $('#arcm'); let tmr = 0, down = null, long = false, drag = null;
-  const hov = el => { $$('#arcm .hov').forEach(x => x !== el && x.classList.remove('hov')); el?.classList.add('hov'); };
-  orb.addEventListener('contextmenu', e => e.preventDefault());
-  orb.addEventListener('pointerdown', e => {
-    if (e.button > 0) return;
-    down = { x: e.clientX, y: e.clientY }; long = false; clearTimeout(tmr); S.orbLong = 0; // a new press: an old hold no longer swallows clicks
-    tmr = setTimeout(() => { long = true; S.orbLong = Date.now(); openArc(false); }, 420);
-  });
-  // window-level: a finger is captured by the orb, a mouse / pen may leave it while dragging to an item
-  window.addEventListener('pointermove', e => {
-    if (drag) { spDrag(e); return; }
-    if (!down) return;
-    if (long) { hov(arcAt(e.clientX, e.clientY)); return; }
-    if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 14) { clearTimeout(tmr); down = null; }
-  });
-  const up = e => {
-    if (drag) { spDrag(e); const v = drag.v; drag = null; S.arcTap = Date.now(); if (v != null && Math.abs(v - prefs.rate) > 0.001) setRateNow(v); return; }
-    clearTimeout(tmr);
-    if (down && long && e.type === 'pointerup') { const el = arcAt(e.clientX, e.clientY); hov(null); if (el) { S.arcTap = Date.now(); arcAct(el); } }
-    down = null;
-  };
-  window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
-  // slider: press on (or near) the speed orbit and drag the knob along it
-  const spDrag = e => {
-    const g = arcGeo(), x = e.clientX - g.rr.left, y = e.clientY - g.rr.top;
-    let deg = Math.atan2(y - g.cy, x - g.cx) * 180 / Math.PI; if (deg < 0) deg += 360; if (deg < 90) deg = 360; // below the orb's left: clamp to the slow end
-    const v = spValue(deg); if (drag.v != null && v !== drag.v) navigator.vibrate?.(6); drag.v = v; spPaint(v);
-  };
-  m.addEventListener('pointerdown', e => {
-    if (!m.classList.contains('spd') || e.target.closest('[data-k]')) return;
-    const g = arcGeo(), x = e.clientX - g.rr.left, y = e.clientY - g.rr.top, d = Math.hypot(x - g.cx, y - g.cy);
-    if (d < g.RS - 52 || d > g.RS + 52 || x > g.cx + 30 || y > g.cy + 30) return;
-    drag = { v: null }; e.preventDefault(); try { m.setPointerCapture(e.pointerId); } catch {}
-    spDrag(e);
-  });
-  // the click that ends a hold is not a play / pause tap; with the orbits open the orb takes you back to reading
-  window.addEventListener('click', e => {
-    const onOrb = e.target.closest && e.target.closest('#pPlay'); if (!onOrb) return;
-    if (S.orbLong && Date.now() - S.orbLong < 2500) { e.stopImmediatePropagation(); e.preventDefault(); S.orbLong = 0; return; }
-    if (arcOpen()) { closeArc(); if (player.playing) { e.stopImmediatePropagation(); e.preventDefault(); } }
-  }, true);
-  m.addEventListener('click', e => {
-    const el = e.target.closest('[data-k]');
-    if (el) { if (Date.now() - (S.arcTap || 0) > 350) arcAct(el); return; }
-    if (Date.now() - (S.orbLong || 0) < 500 || Date.now() - (S.arcTap || 0) < 350) return;
-    closeArc(); // a tap on the text = back to reading
-  });
+  const tr = $('#spd'); let drag = null;
+  const at = e => { const g = spdGeo(), r = tr.getBoundingClientRect(); return Math.max(0, Math.min(SPD_TICKS.length - 1, Math.round((e.clientX - r.left - g.pad) / g.step))); };
+  const move = e => { const i = at(e); if (i !== drag.i) { drag.i = i; S.spdV = SPD_TICKS[i]; spdPaint(S.spdV); fx('tick', true); } };
+  tr.addEventListener('pointerdown', e => { e.preventDefault(); drag = { i: spdI(S.spdV ?? prefs.rate) }; try { tr.setPointerCapture(e.pointerId); } catch {} move(e); });
+  tr.addEventListener('pointermove', e => { if (drag) move(e); });
+  const up = () => { if (!drag) return; drag = null; const v = S.spdV; if (v != null && Math.abs(v - prefs.rate) > 0.001) setRateNow(v); };
+  tr.addEventListener('pointerup', up); tr.addEventListener('pointercancel', up);
+  tr.addEventListener('keydown', e => { const d = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0; if (!d) return; e.preventDefault(); const i = Math.max(0, Math.min(SPD_TICKS.length - 1, spdI(S.spdV ?? prefs.rate) + d)); S.spdV = SPD_TICKS[i]; spdPaint(S.spdV); setRateNow(S.spdV); fx('tick', true); });
+  $('#pSpeed').onclick = () => { fx('tap'); openSpeedTrack(); };
+  // in the speed state the toggle shows only the orange headphones: tap it (or anywhere outside the capsule) to go back
+  document.addEventListener('pointerdown', e => { if (capState() === 'speed' && !e.target.closest('#dock')) { closeSpeedTrack(); if (e.target.closest('#rdScroll')) S.suppressTap = Date.now(); } }, true); // the dismissing tap doesn't also seek or hide the controls
+  document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if ($('#sheet').classList.contains('show')) closeSheet(); else if (capState() === 'speed') closeSpeedTrack(); });
+  addEventListener('resize', () => { if (capState() === 'speed') spdLayout(true); });
+  // soft feedback on every capsule button
+  $('#dock').addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.closest('#dSeg') || b.id === 'pPlay' || b.id === 'pSpeed') return; fx('tap'); });
 })();
-window.addEventListener('popstate', () => closeArc());
-window.addEventListener('resize', () => { if (arcOpen()) renderArc(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && arcOpen() && !uiBusy()) closeArc(); });
 
-window.murmur = { orbitSync, openArc, closeArc, renderArc, arcAct, spValue, openAppSettings, S, prefs, player, APP_VERSION, openStudio, pagesLive, applyListenMarks, clearListenMarks, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
+window.murmur = { capSync, setCapState, capState, openSpeedTrack, closeSpeedTrack, spdPaint, fx, openAppSettings, S, prefs, player, APP_VERSION, openStudio, pagesLive, applyListenMarks, clearListenMarks, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices,  saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
 boot();

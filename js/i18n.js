@@ -37,20 +37,16 @@ const D = {
   }
 };
 
-Object.assign(D.en, { continueQ: 'Shall we go on?', libraryT: 'Library', greetMorning: 'Good morning', greetDay: 'Good afternoon', greetEvening: 'Good evening', greetNight: 'Good night',
-  nowPlaying: 'Now playing', fromPlace: 'From where you stopped', leftT: 'left', readingVoice: 'Reading & voice', sentenceN: 'Sentence {a} of {b}', onShort: 'on',
-  translationT: 'Translation', focusT: 'Focus', pagesSide: 'sideways', pagesScroll: 'scroll', orbitTitle: 'Hold the orbit',
-  orbitHint: 'Slide along the arc and let go on what you need. Outer ring — speed, inner — modes.', hintOrbit: '<b>Tip:</b> hold the orange button — speed, voice, sleep timer, translation, focus and pages.' });
-Object.assign(D.ru, { continueQ: 'Продолжим?', libraryT: 'Библиотека', greetMorning: 'Доброе утро', greetDay: 'Добрый день', greetEvening: 'Добрый вечер', greetNight: 'Доброй ночи',
-  nowPlaying: 'Сейчас звучит', fromPlace: 'С места, где остановились', leftT: 'осталось', readingVoice: 'Чтение и озвучка', sentenceN: 'Предложение {a} из {b}', onShort: 'вкл',
-  translationT: 'Перевод', focusT: 'Фокус', pagesSide: 'вбок', pagesScroll: 'лента', orbitTitle: 'Удерживай орбиту',
-  orbitHint: 'Веди палец по дуге и отпусти на нужном. Внешнее кольцо — скорость, внутреннее — режимы.', hintOrbit: '<b>Совет:</b> удерживайте оранжевую кнопку — скорость, голос, таймер сна, перевод, фокус и страницы.' });
-Object.assign(D.en, { moreT: 'More', orbitsT: 'Orbits', speedHint: 'Drag the knob along the orbit', prevT: 'Previous sentence', nextT: 'Next sentence', textT: 'Text',
-  orbitHint: 'Slide along an orbit and let go on what you need, or tap. Tap the text to go back to reading.',
-  hintOrbit2: '<b>Hold the orange button</b> — every setting lives on its orbits. Tap a word to start reading from it.' });
-Object.assign(D.ru, { moreT: 'Ещё', orbitsT: 'Орбиты', speedHint: 'Ведите ползунок по орбите', prevT: 'Предыдущее предложение', nextT: 'Следующее предложение', textT: 'Текст',
-  orbitHint: 'Веди палец по орбите и отпусти на нужном — или просто нажми. Нажми на текст, чтобы вернуться к чтению.',
-  hintOrbit2: '<b>Удерживайте оранжевую кнопку</b> — все настройки на её орбитах. Нажмите на слово — чтение начнётся с него.' });
+Object.assign(D.en, { continueQ: 'Shall we go on?', libraryT: 'Library', greetMorning: 'Good morning', greetDay: 'Good afternoon', greetEvening: 'Good evening', greetNight: 'Good night', fromPlace: 'From where you stopped', leftT: 'left', readingVoice: 'Reading & voice',
+  translationT: 'Translation', focusT: 'Focus', });
+Object.assign(D.ru, { continueQ: 'Продолжим?', libraryT: 'Библиотека', greetMorning: 'Доброе утро', greetDay: 'Добрый день', greetEvening: 'Добрый вечер', greetNight: 'Доброй ночи', fromPlace: 'С места, где остановились', leftT: 'осталось', readingVoice: 'Чтение и озвучка',
+  translationT: 'Перевод', focusT: 'Фокус', });
+Object.assign(D.en, { textT: 'Text', });
+Object.assign(D.ru, { textT: 'Текст', });
+Object.assign(D.en, { readingT: 'Reading', ofT: 'of', uiSoundT: 'Button sounds', hapticsT: 'Haptics',
+  hintCap: '<b>Book — read, headphones — listen.</b> Tap a word to start from it; tap an empty spot to hide the controls.' });
+Object.assign(D.ru, { readingT: 'Чтение', ofT: 'из', uiSoundT: 'Звук кнопок', hapticsT: 'Виброотклик',
+  hintCap: '<b>Книга — читать, наушники — слушать.</b> Нажмите на слово, чтобы начать с него; касание пустого места прячет панель.' });
 let lang = localStorage.getItem('murmur:ui') || ((navigator.language || 'en').startsWith('ru') ? 'ru' : 'en');
 export const t = k => (D[lang] && D[lang][k]) || D.en[k] || k;
 export const uiLang = () => lang;
