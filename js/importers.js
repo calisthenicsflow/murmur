@@ -1,5 +1,5 @@
 // Importers: plain text, PDF (pdf.js), EPUB (JSZip), web article (r.jina.ai reader).
-import { splitSections, detectLang, wc } from './text.js?v=1.7.0';
+import { splitSections, detectLang, wc } from './text.js?v=1.7.1';
 
 const loadScript = src => new Promise((res, rej) => {
   if (document.querySelector(`script[src="${src}"]`)) return res();

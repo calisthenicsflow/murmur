@@ -157,15 +157,6 @@ body[data-theme=night] .st-tile,body[data-theme=night] .st-week{border-color:rgb
 .st-actions .pill-black{background:var(--accent);color:var(--accent-ink);box-shadow:var(--glow)}
 .st-bookbtn,.st-pal,.st-save,.st-fmt{background:var(--chip);border-color:var(--hair)}
 
-/* 1.6.2 (t169u): focus = the spoken word, big and centred on a solid orange pill (flat, light glow) */
-.f-stage{gap:26px}
-.f-word{display:flex;justify-content:center;align-items:center;min-height:96px}
-.f-word span{display:inline-block;max-width:100%;font-family:var(--serif);font-weight:600;line-height:1.15;letter-spacing:-.01em;padding:.1em .38em .14em;border-radius:20px;background:var(--accent);color:var(--accent-ink);box-shadow:0 0 22px -4px rgba(255,90,31,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:lining-nums}
-body[data-theme=paper] .f-word span,body[data-theme=sepia] .f-word span{box-shadow:0 0 16px -6px rgba(255,90,31,.6)}
-.f-word.idle span{background:transparent;color:var(--ink);box-shadow:none;border:1.5px dashed var(--chipB)}
-.f-s.cur .w{padding:0;margin:0}
-.f-s.cur{font-size:clamp(19px,5.4vw,23px);text-align:center}
-.f-s.cur.long{font-size:18px}.f-s.cur.xlong{font-size:16px}
 /* 1.6.2 QA: one size control in «Текст» (the slider with its number), not two */
 #fsSteps{display:none}
 
@@ -258,3 +249,52 @@ body:not([data-theme=night]) .spd-kn{box-shadow:0 6px 14px -6px rgba(255,90,31,.
 .bi-sub>div{min-height:0;overflow:hidden}
 .bi-sub.off{grid-template-rows:0fr;opacity:0}
 @media (prefers-reduced-motion:reduce){.bi-sub{transition:none}}
+
+/* ===================== 1.7.1 — page dividers (scroll) and text under the capsule (pages) ===================== */
+.pgdivs,.pgpeek{position:absolute;left:0;top:0;z-index:0;pointer-events:none}
+#reader.pages .pgdivs,#reader:not(.pages) .pgpeek{display:none}
+.pgpeek .pk{position:absolute;white-space:nowrap;overflow:visible;font-optical-sizing:auto;text-rendering:optimizeLegibility;font-kerning:normal}
+#reader:not(.pages) .rd-text .w.pgb{display:inline-block;margin-top:var(--pgb,30px);text-indent:0}
+.pgd{position:absolute;top:0;height:16px;margin-top:-8px;display:flex;align-items:center;justify-content:center;gap:12px}
+.pgd i{width:44px;height:1px;background:color-mix(in srgb,var(--ink) 16%,transparent)}
+.pgd span{display:flex;align-items:center;gap:7px;padding-right:11px;font:600 10.5px/16px var(--ui);letter-spacing:.16em;color:var(--muted);font-variant-numeric:lining-nums tabular-nums}
+.pgd span::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--accent)}
+/* WebKit repeats a fragmented box's padding in every column; the opening space is a pseudo block instead,
+   so both engines start every page at its very top and the scroll stream can paginate the same way */
+#reader.pages .rd-text{padding-top:0;padding-bottom:0}
+#reader.pages .rd-text::before{content:"";display:block;height:16px}
+/* the off-screen copy scroll mode paginates with: the very rules pages mode lays its columns out by */
+.pgprobe{position:absolute;left:-40000px;top:0;visibility:hidden;pointer-events:none;contain:layout style}
+.pgprobe .rd-flow{box-sizing:border-box;margin:0;height:var(--pg-h);padding-top:0;column-width:var(--pw);column-gap:0;column-fill:auto;align-content:start}
+.pgprobe .rd-text{padding-top:0;padding-bottom:0;transition:none}
+.pgprobe .rd-text::before{content:"";display:block;height:16px}
+.pgprobe .rd-text p{orphans:2;widows:2}
+.pgprobe .rd-text .w,.pgprobe .rd-text .w.cw,.pgprobe .rd-text .w.split{position:static;z-index:auto;transition:none}
+.pgprobe .rd-text .s{transition:none;opacity:1}
+.pgprobe .rd-head{break-after:avoid;margin-top:0}
+.pgprobe .rd-next{margin-top:18px;break-inside:avoid}
+.pgprobe .ch + .ch > :first-child,.pgprobe .ch + .ch > :first-child.hd,.pgprobe .ch + .ch > .hd-start,.pgprobe .ch + .ch > .ch-div{margin-top:0}
+.pgprobe .ch + .ch{break-before:column}
+
+/* ===================== 1.7.1 — focus: the book in large calm type, a vignette by distance ===================== */
+.f-stage{display:block;padding:0;gap:0;overflow:hidden;touch-action:none;margin-top:calc(var(--safe-t) + 56px);
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 44px);mask-image:linear-gradient(to bottom,transparent 0,#000 44px)} /* the text softly runs out under the counter */
+.f-col{position:absolute;left:0;right:0;top:0;padding:0 30px 0 34px;transform:translate3d(0,0,0);will-change:transform;transition:transform .72s var(--cap-ease)}
+.f-col .f-s{position:relative;font-family:var(--serif);font-size:clamp(21px,5.8vw,25px);line-height:1.52;letter-spacing:-.003em;color:var(--ink);text-align:left;margin:0 0 .85em;text-wrap:pretty;
+  opacity:1;filter:none;transition:opacity .6s var(--ease),filter .6s var(--ease),color .4s var(--ease);will-change:opacity,filter;cursor:pointer;font-variant-numeric:lining-nums}
+.f-s[data-d="1"]{opacity:.34;filter:blur(1.1px)}
+.f-s[data-d="2"]{opacity:.19;filter:blur(2.2px)}
+.f-s[data-d="3"]{opacity:.1;filter:blur(3.2px)}
+.f-s[data-d="4"]{opacity:.045;filter:blur(4.2px)}
+.f-s.cur{opacity:1;filter:none;cursor:default}
+.f-col .f-s .w{position:relative;border-radius:5px;padding:0;margin:0;transition:color .16s}
+.f-s.cur.speaking .w:not(.done):not(.cw){color:color-mix(in srgb,var(--ink) 58%,transparent)}
+.f-s.cur .w.cw{color:var(--accent-ink);z-index:1}
+.f-s.cur .w.cw::before{content:"";position:absolute;left:calc(-1 * var(--fhl-padx, .12em));width:calc(100% + 2 * var(--fhl-padx, .12em));top:var(--fhl-top, -0.12em);height:var(--fhl-h, 1.05em);border-radius:6px;background:var(--accent);box-shadow:0 0 14px -4px rgba(255,90,31,.55);z-index:-1;pointer-events:none}
+.f-s.cur .w.cw.split::before{display:none}
+.f-col .f-hls{position:absolute;inset:0;pointer-events:none;z-index:0}
+/* the guiding rule: a thin orange line beside the sentence in focus, gliding with it */
+.f-rule{position:absolute;left:16px;top:0;width:2.5px;height:100px;border-radius:2px;background:var(--accent);opacity:.9;transform-origin:0 0;transform:scaleY(0);transition:transform .72s var(--cap-ease);pointer-events:none}
+.f-tr{font-family:var(--ui);font-size:15.5px;line-height:1.5;color:var(--ink2);border-left:0;padding-left:0;margin:-.35em 0 1.1em;opacity:.85}
+.f-prog{letter-spacing:.18em;font-variant-numeric:lining-nums tabular-nums}
+@media (prefers-reduced-motion:reduce){.f-col,.f-rule{transition:none}.f-s{transition:opacity .2s linear;filter:none!important}.f-s[data-d="1"]{opacity:.3}.f-s[data-d="2"]{opacity:.16}}

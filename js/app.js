@@ -1,19 +1,19 @@
-import { db } from './db.js?v=1.7.0';
-import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.7.0';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.7.0';
-import { coverSVG, autoCover } from './covers.js?v=1.7.0';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.7.0';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.7.0';
-import { Player } from './player.js?v=1.7.0';
-import { translateMany } from './translate.js?v=1.7.0';
-import { track, summary } from './stats.js?v=1.7.0';
-import { renderCard, shareCard } from './quotes.js?v=1.7.0';
-import { openStudio, defaultStyle } from './studio.js?v=1.7.0';
-import { presetById, FORMATS } from './qrender.js?v=1.7.0';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.7.0';
-import { SAMPLES } from './samples.js?v=1.7.0';
+import { db } from './db.js?v=1.7.1';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.7.1';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.7.1';
+import { coverSVG, autoCover } from './covers.js?v=1.7.1';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.7.1';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.7.1';
+import { Player } from './player.js?v=1.7.1';
+import { translateMany } from './translate.js?v=1.7.1';
+import { track, summary } from './stats.js?v=1.7.1';
+import { renderCard, shareCard } from './quotes.js?v=1.7.1';
+import { openStudio, defaultStyle } from './studio.js?v=1.7.1';
+import { presetById, FORMATS } from './qrender.js?v=1.7.1';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.7.1';
+import { SAMPLES } from './samples.js?v=1.7.1';
 
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.7.1';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -89,6 +89,7 @@ function applyLook() {
   $('meta[name=theme-color]').setAttribute('content', tc);
   capSync();
   requestAnimationFrame(() => { layoutPages(); positionHL(true); });
+  if (S.screen === 'reader') { S.pgSig = null; paginateSoon(380); } // after the .25s font-size transition settles
 }
 
 const keepWordInView = debounce(() => { if (S.screen === 'reader' && S.curW >= 0) { positionHL(true); scrollToWord(S.curW, false); } }, 120);
@@ -523,7 +524,7 @@ function renderSection(startWord = 0, scroll = true) {
   art.insertAdjacentHTML('afterbegin', trOnly() ? `<div class="tr-banner"><span>${ICON.tr}${esc(t('readingIn').replace('{lang}', uiLang() === 'ru' ? langName(S.book.trTo, 'ru').toLowerCase() : langName(S.book.trTo, uiLang())))}</span><button id="trOrig">${t('showOriginal')}</button></div>` : '');
   if (trOnly()) $('#trOrig').onclick = e => { e.stopPropagation(); exitTrOnly(); };
   // translations arrive asynchronously and shift the layout; keep the floating highlight glued to its word
-  if (!art._ro && window.ResizeObserver) { let raf = 0; art._ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const w = Math.round(art.clientWidth); if (S._artW !== w) { S._artW = w; if (prefs.pages) layoutPages(); } positionHL(true); if (S.selRange) positionHandles(); }); }); art._ro.observe(art); }
+  if (!art._ro && window.ResizeObserver) { let raf = 0; art._ro = new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const w = Math.round(art.clientWidth); if (S._artW !== w) { S._artW = w; if (prefs.pages) layoutPages(); } positionHL(true); if (S.selRange) positionHandles(); paginateSoon(220); }); }); art._ro.observe(art); }
   updateNextBtn(); updateOCRPill(b);
   const sw = Math.min(startWord, S.model.words.length - 1);
   setCurrent(Math.max(0, sw), false);
@@ -535,6 +536,7 @@ function renderSection(startWord = 0, scroll = true) {
   if (prefs.focus) renderFocus(true);
   // the neighbouring chapters are rendered right away, so text is always there when the reader scrolls
   ensureWindow(); requestAnimationFrame(() => ensureWindow()); warmModels();
+  S.pgSig = null; paginateSoon(80);
   // voices for this language
   S.voiceReady = syncVoice();
 }
@@ -592,6 +594,7 @@ function setWindow(a, z) {
   if (prefs.focus) renderFocus(true);
   positionHL(true); // the highlight box lives in scroll coordinates: follow the moved text
   updateNextBtn(); updateProgress(); warmModels();
+  S.pgSig = null; paginateSoon(120);
   return true;
 }
 /** keep enough text rendered around the reader: never a blank screen, never a wait */
@@ -941,7 +944,7 @@ function layoutPages() {
     const pw = pageW();
     const top = rdTopPx();
     const bottom = CAP_BAND + envInset('bottom'); // 1.7.0: the column ends just above the floating capsule, never under it
-    const h = Math.max(80, Math.round(sc.clientHeight - top - bottom));
+    const h = pgColH(); // the one page height both modes paginate with
     const key = pw + '|' + top + '|' + bottom + '|' + h;
     if (S._pgKey === key) return; // nothing changed — touching column CSS here makes WebKit flash the page
     S._pgKey = key;
@@ -953,9 +956,210 @@ function layoutPages() {
     sc.style.setProperty('--pg-b', bottom + 'px');
     sc.style.setProperty('--pg-h', h + 'px');
     sc.style.setProperty('--pw', pw + 'px');
-    updateProgress();
+    updateProgress(); paginateSoon(60);
   } finally { S._inLayout = false; }
 }
+/* ------------------------------ pagination (1.7.1) ------------------------------
+   One page model for both modes. Pages mode measures its real CSS columns; scroll mode lays the same
+   lines into columns of the same height (the same fill / orphans / widows / keep-with-next rules), so a
+   page in the scroll stream starts on exactly the word a swipe page starts on. Page counts are kept per
+   chapter (stable while chapters come and go around the reader); chapters that were never laid out are
+   estimated from the words-per-page of the measured ones. Numbers are book-wide. */
+function pgColH() { const sc = $('#rdScroll'); return Math.max(80, Math.round(sc.clientHeight - rdTopPx() - CAP_BAND - envInset('bottom'))); }
+function pgKey() {
+  const p = $('#rdText p'), cs = p && getComputedStyle(p);
+  return [S.book?.id, pageW(), pgColH(), cs?.fontSize, cs?.fontFamily, cs?.lineHeight, cs?.textAlign, biOn() ? biTarget() : '', S.book?.trTo || '', prefs.skip ? 1 : 0].join('|');
+}
+S.pgC = { key: '', n: {} }; // measured pages per chapter for the current layout key
+S.pgStarts = {};             // sec -> local word index of each page's first word (rendered chapters)
+S.pgCol0 = {};               // pages mode: column of each chapter's first page
+function pgCount(sec) {
+  const m = S.pgC.n[sec]; if (m) return m;
+  const sw = secWords(); let mw = 0, mp = 0;
+  for (const k in S.pgC.n) { mw += sw[k] || 0; mp += S.pgC.n[k]; }
+  const wpp = mp ? Math.max(40, mw / mp) : 260;
+  return Math.max(1, Math.round((sw[sec] || 0) / wpp + 0.45));
+}
+function pgOffset(sec) { let o = 0; for (let j = 0; j < sec; j++) o += pgCount(j); return o; }
+function pgTotal() { const n = S.book?.sections.length || 0; let o = 0; for (let j = 0; j < n; j++) o += pgCount(j); return Math.max(1, o); }
+/** book-wide page number (1-based) of model word w */
+function pageNoOfWord(w) {
+  const M = S.model; if (!M || !M.words[w]) return 1;
+  const sec = M.sents[M.words[w].s].sec, si = secInfo(sec), st = S.pgStarts[sec];
+  let k = 0;
+  if (st && si) { const lw = w - si.w0; let lo = 0, hi = st.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (st[mid] <= lw) lo = mid; else hi = mid - 1; } k = lo; }
+  return pgOffset(sec) + Math.min(k, pgCount(sec) - 1) + 1;
+}
+/** the page shown in the capsule: the visible column in pages mode, the reading place in scroll mode */
+function pageNow() {
+  if (prefs.pages && !prefs.focus) { // in focus the page is the one the focused sentence is on
+    const i = pageInfo().i; let sec = null;
+    for (const k in S.pgCol0) if (S.pgCol0[k] <= i && (sec === null || S.pgCol0[k] > S.pgCol0[sec])) sec = +k;
+    if (sec === null) return S.curW >= 0 ? pageNoOfWord(S.curW) : 1;
+    return pgOffset(sec) + Math.min(i - S.pgCol0[sec], pgCount(sec) - 1) + 1;
+  }
+  return S.curW >= 0 ? pageNoOfWord(S.curW) : 1;
+}
+/** first word of every column, per chapter (root: the text; x0: where column 0 starts on screen) */
+function pgColumns(root, x0, scrollLeft) {
+  const pw = pageW(), starts = {}, col0 = {};
+  for (const ch of root.querySelectorAll('.ch')) {
+    const sec = +ch.dataset.sec, si = secInfo(sec); if (!si) continue;
+    const arr = []; let last = -1;
+    for (const el of ch.querySelectorAll('.w')) {
+      const r = el.getClientRects()[0]; if (!r || !r.width) continue;
+      const c = Math.floor((r.left + 1 - x0 + scrollLeft) / pw);
+      if (c > last) { if (last < 0) col0[sec] = c; arr.push(+el.dataset.w - si.w0); last = c; }
+    }
+    if (arr.length) starts[sec] = arr;
+  }
+  return { starts, col0 };
+}
+/** pages mode: the real columns */
+function pgMeasureColumns() { const sc = $('#rdScroll'); return pgColumns($('#rdText'), sc.getBoundingClientRect().left, sc.scrollLeft); }
+/** scroll mode: the rendered chapters laid out once, off screen, exactly as pages mode lays them out
+ *  (same column height, width and fragmentation rules) — so every engine breaks the pages where a swipe would */
+function pgMeasureProbe() {
+  const pw = pageW(), h = pgColH();
+  const pr = document.createElement('div'); pr.className = 'pgprobe'; pr.setAttribute('aria-hidden', 'true');
+  pr.style.cssText = `--pw:${pw}px;--pg-h:${h}px;width:${pw}px`;
+  const flow = document.createElement('div'); flow.className = 'rd-flow';
+  let art = null;
+  for (const el of [$('#rdHead'), $('#rdText'), $('#rdNext')]) {
+    if (!el) continue; const c = el.cloneNode(true); c.removeAttribute('id'); c.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'));
+    if (el.id === 'rdText') art = c; flow.appendChild(c);
+  }
+  pr.appendChild(flow); $('#reader').appendChild(pr);
+  try { return pgColumns(art, flow.getBoundingClientRect().left, 0); } finally { pr.remove(); }
+}
+/* scroll mode: a calm page divider in the gap where a page begins. The gap is opened by a word on that
+   line becoming an inline-block with a top margin (no line re-wraps); the hairline + number live in
+   #pgDivs, a sibling layer like #hls, so nothing else in the text changes. */
+const PG_GAP = 30;
+function pgDivHost() {
+  let h = $('#pgDivs');
+  if (!h) { h = document.createElement('div'); h.id = 'pgDivs'; h.className = 'pgdivs'; h.setAttribute('aria-hidden', 'true'); $('#rdScroll').insertBefore(h, $('#rdFlow')); }
+  return h;
+}
+function pgClearGaps() {
+  let had = false;
+  $$('#rdText .w.pgb').forEach(el => { el.classList.remove('pgb'); el.style.removeProperty('--pgb'); had = true; });
+  return had;
+}
+function paginate() {
+  if (!S.model || !S.book || S.screen !== 'reader') return;
+  const sc = $('#rdScroll'), key = pgKey();
+  if (S.pgC.key !== key) S.pgC = { key, n: {} };
+  if (prefs.pages) {
+    if (pgClearGaps()) {}
+    pgDivHost().replaceChildren();
+    const m = pgMeasureColumns();
+    S.pgStarts = m.starts; S.pgCol0 = m.col0;
+    for (const s in m.starts) S.pgC.n[s] = m.starts[s].length;
+    S.pgSig = null;
+    updateProgress(); buildPeek();
+    return;
+  }
+  S.pgCol0 = {};
+  // anchor: the first word at the top of the reading area keeps its place while gaps come and go
+  const sr = sc.getBoundingClientRect(), topY = sr.top + rdTopPx();
+  let anchor = null, aTop = 0;
+  for (const el of S.wordEls) { if (!el) continue; const r = el.getBoundingClientRect(); if (r.bottom > topY) { anchor = el; aTop = r.top; break; } }
+  pgClearGaps();
+  const m = pgMeasureProbe(), host = pgDivHost(), frag = document.createDocumentFragment(), marks = [];
+  S.pgStarts = m.starts;
+  for (const s in m.starts) {
+    const st = m.starts[s], si = secInfo(+s); S.pgC.n[s] = st.length;
+    st.forEach((lw, k) => {
+      if (k === 0) return; // a chapter opens with its own heading
+      const w0 = si.w0 + lw, first = S.wordEls[w0]; if (!first) return;
+      const r0 = first.getClientRects()[0]; if (!r0) return;
+      const cy0 = (r0.top + r0.bottom) / 2;
+      // the gap is opened by a whole word on that line (not a hyphenated piece)
+      let wEl = null;
+      for (let w = w0; w < Math.min(S.wordEls.length, w0 + 40); w++) {
+        const el = S.wordEls[w]; if (!el) continue; const rs = el.getClientRects(); if (!rs.length) continue;
+        const cy = (rs[0].top + rs[0].bottom) / 2; if (Math.abs(cy - cy0) > 4) break;
+        if (rs.length === 1 && !el.classList.contains('dcw')) { wEl = el; break; }
+      }
+      if (!wEl) return;
+      const para = first.closest('p'), paraStart = !!para && para.querySelector('.w') === first;
+      marks.push({ el: wEl, gap: paraStart ? Math.max(12, PG_GAP - 14) : PG_GAP, no: pgOffset(+s) + k + 1 });
+    });
+  }
+  marks.forEach(m => { m.el.style.setProperty('--pgb', m.gap + 'px'); m.el.classList.add('pgb'); });
+  const cr = sc.getBoundingClientRect(), ar = $('#rdText').getBoundingClientRect(), pad = 26;
+  marks.forEach(m => {
+    const r = m.el.getBoundingClientRect(); // the word's box; the opened gap is just above its line
+    const lh = parseFloat(getComputedStyle(m.el.closest('p') || m.el).lineHeight) || r.height * 1.6;
+    const lineTop = (r.top + r.bottom) / 2 - lh / 2;
+    const y = lineTop - m.gap / 2 - cr.top + sc.scrollTop + (m.gap < PG_GAP ? -4 : 2);
+    const d = document.createElement('div'); d.className = 'pgd';
+    d.style.cssText = `left:${(ar.left - cr.left + pad).toFixed(1)}px;width:${(ar.width - pad * 2).toFixed(1)}px;transform:translateY(${y.toFixed(1)}px)`;
+    d.innerHTML = `<i></i><span>${m.no}</span><i></i>`;
+    frag.appendChild(d);
+  });
+  host.replaceChildren(frag);
+  if (anchor && anchor.isConnected) { const d = anchor.getBoundingClientRect().top - aTop; if (Math.abs(d) > 0.5) { S.progScroll = Date.now(); sc.scrollTop += d; } }
+  S.pgSig = pgSig();
+  positionHL(true); if (S.selRange) positionHandles();
+  updateProgress();
+}
+// what the page layout depends on, minus our own gaps (so the gaps themselves never re-trigger it)
+function pgSig() { const art = $('#rdText'); let g = 0; $$('#rdText .w.pgb').forEach(el => g += parseFloat(el.style.getPropertyValue('--pgb')) || 0); return pgKey() + '|' + (S.win ? S.win.a + '-' + S.win.z : '') + '|' + Math.round(art.offsetHeight - g) + '|' + art.offsetWidth; }
+let pgT = 0;
+function paginateSoon(ms = 160) { clearTimeout(pgT); pgT = setTimeout(() => { if (!prefs.pages && S.pgSig && S.pgSig === pgSig()) return; paginate(); }, ms); }
+/* pages mode: under the floating capsule the next page's opening lines show through, exactly where the
+   text would run on in scroll mode. They are copies (plain spans in #pgPeek, a sibling layer) and stay on
+   the next page, so a line behind the capsule is never lost: it is the first thing on the page after the turn. */
+function peekHost() {
+  let h = $('#pgPeek');
+  if (!h) { h = document.createElement('div'); h.id = 'pgPeek'; h.className = 'pgpeek'; h.setAttribute('aria-hidden', 'true'); $('#rdScroll').insertBefore(h, $('#rdFlow')); }
+  return h;
+}
+function buildPeek() {
+  const host = peekHost();
+  if (!prefs.pages || !S.model) { host.replaceChildren(); host._k = ''; return; }
+  const sc = $('#rdScroll'), sr = sc.getBoundingClientRect(), pw = pageW(), { i, n } = pageInfo();
+  const top = rdTopPx(), H = pgColH(), visBot = sc.clientHeight - envInset('bottom') - 4;
+  const k = `${i}|${n}|${pw}|${H}|${S._pgKey}|${S.model.words.length}|${prefs.theme}|${S.win?.a}`;
+  if (host._k === k) return; host._k = k;
+  const frag = document.createDocumentFragment();
+  // columns: first and last word index of each (words are in reading order)
+  const colOf = el => { const r = el.getClientRects()[0]; return r && r.width ? Math.floor((r.left + 1 - sr.left + sc.scrollLeft) / pw) : -1; };
+  const els = S.wordEls;
+  const findFirst = c => { let lo = 0, hi = els.length - 1, ans = -1; while (lo <= hi) { const mid = (lo + hi) >> 1; let m = mid; while (m <= hi && !els[m]) m++; if (m > hi) { hi = mid - 1; continue; } const cc = colOf(els[m]); if (cc >= c) { ans = m; hi = mid - 1; } else lo = m + 1; } return ans; };
+  for (let p = Math.max(0, i - 1); p <= Math.min(n - 2, i + 1); p++) {
+    const a = findFirst(p + 1); if (a < 0) continue;
+    if (els[a].closest('.ch') && els[a].closest('.ch').querySelector('.w') === els[a] && els[a].closest('.ch').previousElementSibling) continue; // the next page opens a chapter: nothing runs on
+    // the last line on page p, to keep the line pitch running on
+    let lastB = top; for (let q = a - 1; q >= 0 && q > a - 60; q--) { const el = els[q]; if (!el) continue; const rs = el.getClientRects(); const r = rs[rs.length - 1]; if (r && Math.floor((r.left + 1 - sr.left + sc.scrollLeft) / pw) === p) { lastB = r.bottom - sr.top; break; } }
+    const first = els[a].getClientRects()[0]; if (!first) continue;
+    const blkA = els[a].closest('p'), newPara = blkA && blkA.querySelector('.w') === els[a];
+    const pm = newPara ? parseFloat(getComputedStyle(blkA).marginTop || 0) + parseFloat(getComputedStyle(blkA.previousElementSibling || blkA).marginBottom || 0) : 0;
+    const lead = (parseFloat(getComputedStyle(els[a]).lineHeight) || first.height * 1.6) - first.height;
+    const dy = (lastB + lead + pm) - (first.top - sr.top);
+    const dx = (p - (p + 1)) * pw;
+    for (let q = a; q < els.length && q < a + 160; q++) {
+      const el = els[q]; if (!el) continue;
+      const rs = el.getClientRects(); if (!rs.length) continue;
+      let stop = false;
+      for (const r of rs) {
+        if (Math.floor((r.left + 1 - sr.left + sc.scrollLeft) / pw) !== p + 1) { stop = true; break; }
+        const y = r.top - sr.top + dy; if (y + r.height > visBot) { stop = true; break; }
+        const sp = document.createElement('span'); sp.className = 'pk';
+        const cs = getComputedStyle(el);
+        sp.textContent = el.textContent; // a hyphenated word shows the piece on this line (clipped from its side)
+        sp.style.cssText += `left:${(r.left - sr.left + sc.scrollLeft + dx).toFixed(1)}px;top:${y.toFixed(1)}px;width:${(r.width + 0.5).toFixed(1)}px;height:${r.height.toFixed(1)}px;line-height:${r.height.toFixed(1)}px;color:${cs.color};font:${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        if (rs.length > 1) { sp.style.overflow = 'hidden'; if (r !== rs[0]) sp.style.direction = 'rtl'; }
+        frag.appendChild(sp);
+      }
+      if (stop) break;
+    }
+  }
+  host.replaceChildren(frag);
+}
+const peekSoon = debounce(() => buildPeek(), 90);
 /** vertical centre of the visible reading area (below the header, above the player or dock). */
 function readingCenterY() {
   const sc = $('#rdScroll'); if (!sc) return innerHeight / 2;
@@ -1031,7 +1235,7 @@ $('#rdScroll').addEventListener('scroll', () => {
   // only the reader's own scrolling moves the reading place (not our jumps / auto-follow)
   if (S.mode === 'read' && !player.playing && Date.now() - (S.progScroll || 0) > 900) readPosSoon();
   if (Date.now() - S.lastUserScroll > 4000) $('#recenter').classList.remove('show');
-  if (prefs.pages) updateProgressSoon();
+  if (prefs.pages) { updateProgressSoon(); peekSoon(); } else updateProgressSoon();
   // close to the edge of what's rendered: add text in this very frame, never a blank screen
   { const sc = $('#rdScroll'); const H = sc.clientHeight; if (!prefs.pages && (sc.scrollTop + H * 3 > sc.scrollHeight || sc.scrollTop < H * 1.5 && S.win && S.win.a > 0)) ensureWindow(); else flowSoon(); }
 }, { passive: true });
@@ -1138,7 +1342,9 @@ function setPages(on) {
   applyListenMarks();
   if (on) layoutPages();
   $('#rdText').classList.toggle('listening', S.mode === 'listen' && !on);
-  requestAnimationFrame(() => { if (S.curW >= 0 && w >= 0) scrollToWord(S.curW, false); positionHL(true); updateProgress(); });
+  if (!on) { peekHost().replaceChildren(); peekHost()._k = ''; }
+  S.pgSig = null;
+  requestAnimationFrame(() => { if (!on) paginate(); if (S.curW >= 0 && w >= 0) scrollToWord(S.curW, false); positionHL(true); updateProgress(); if (on) paginateSoon(40); });
 }
 const readPosSoon = debounce(() => {
   // first sentence visible (top third of the screen, or the current page) → reading position
@@ -1159,13 +1365,13 @@ const savePosSoon = debounce(savePos, 1500);
 const savePosNow = () => { if (S.book && S.screen === 'reader' && S.model && S.curS >= 0) { S.book.pos = placeOf(S.model.sents[S.curS].words[0]); savePos(); } };
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') savePosNow(); });
 window.addEventListener('pagehide', savePosNow);
-window.addEventListener('resize', () => { syncViewport(); positionHL(true); positionHandles(); });
+window.addEventListener('resize', () => { syncViewport(); positionHL(true); positionHandles(); paginateSoon(200); });
 if (window.visualViewport) {
   visualViewport.addEventListener('resize', () => { syncViewport(); positionHL(true); positionHandles(); });
   visualViewport.addEventListener('scroll', () => { syncViewport(); positionHL(true); positionHandles(); });
 }
 $('#app').addEventListener('scroll', () => { $('#app').scrollLeft = 0; $('#app').scrollTop = 0; });
-document.fonts && document.fonts.ready.then(() => { fontInk._m?.clear(); positionHL(true); if (S.selRange) positionHandles(); });
+document.fonts && document.fonts.ready.then(() => { fontInk._m?.clear(); positionHL(true); if (S.selRange) positionHandles(); S.pgSig = null; paginateSoon(); });
 document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => requestAnimationFrame(() => { fontInk._m?.clear(); positionHL(true); if (S.selRange) positionHandles(); }));
 
 function updateProgress() {
@@ -1879,7 +2085,7 @@ player.on.trans = (s, on) => {
   $$('.tw.cw').forEach(x => x.classList.remove('cw'));
   S.trEl = null;
   if (on) { $(`.tr[data-t="${s}"]`)?.classList.add('speaking'); S.wordEls[S.curW]?.classList.remove('cw'); }
-  const ft = $('#fStage .f-tr'); if (ft) ft.classList.toggle('speaking', on);
+  const ft = $('#fCol .f-tr'); if (ft) ft.classList.toggle('speaking', on);
   positionHL();
 };
 player.on.transWord = (s, k) => {
@@ -1903,28 +2109,102 @@ player.on.sentence = () => {};
 /* ------------------------------ focus mode ------------------------------ */
 function renderFocus(force) {
   const f = $('#focus');
+  const was = f.classList.contains('show');
   f.classList.toggle('show', !!prefs.focus);
-  if (!prefs.focus || !S.model) return;
-  const s = Math.max(0, S.curS), { sents, words } = S.model;
-  if (!force && f.dataset.s === String(s)) return;
-  f.dataset.s = s;
-  const tr = S.trans[transKey()] || [];
-  const ctx = i => sents[i] ? `<div class="f-s ctx">${esc(sents[i].text)}</div>` : '<div class="f-s ctx"></div>';
-  $('#fStage').innerHTML = `<div class="f-word idle" id="fWord" aria-live="off"><span></span></div><div class="f-s cur f-enter${player.playing ? ' speaking' : ''}${sents[s].text.length > 330 ? ' xlong' : sents[s].text.length > 210 ? ' long' : ''}">${sents[s].words.map(w => `<span class="w" data-fw="${w}">${esc(words[w].t)}</span>${words[w].ns ? '' : ' '}`).join('').trimEnd()}</div>${biOn() ? `<div class="f-tr f-enter">${esc(tr[s] || '…')}</div>` : ''}${ctx(s + 1)}`;
-  $('#fProg').textContent = `${s + 1} / ${sents.length}`;
-  focusWord(S.curW >= 0 ? S.curW : sents[s].words[0]);
+  if (!prefs.focus) { if (was) focusLeave(); return; }
+  if (!S.model) return;
+  const s = Math.max(0, S.curS);
+  if (!force && f.dataset.s === String(s) && $('#fCol')) return;
+  focusShow(s, !force && was);
+}
+/* 1.7.1 focus: the book itself, in large calm type. The sentence being read is fully crisp; the lines
+   around it fade and soften with distance (a vignette by distance, not by gradient). Moving on glides the
+   column so the new sentence settles at the reading line, while blur and opacity re-balance — no jumps. */
+const F_R = 4; // sentences kept on each side
+function fSentHtml(i) {
+  const { sents, words } = S.model, x = sents[i];
+  return `<div class="f-s" data-s="${i}">${x.words.map(w => `<span class="w" data-fw="${w}">${esc(words[w].t)}</span>${words[w].ns ? '' : ' '}`).join('').trimEnd()}</div>`;
+}
+function focusShow(s, anim) {
+  const stage = $('#fStage'), M = S.model; if (!stage || !M.sents[s]) return;
+  $('#focus').dataset.s = s;
+  let col = $('#fCol');
+  const rm = REDUCED_MOTION.matches;
+  if (!col || !anim) { stage.innerHTML = '<div class="f-col" id="fCol"><i class="f-rule" id="fRule"></i></div>'; col = $('#fCol'); anim = false; }
+  // FLIP anchor: a sentence that stays, so the column can be re-based before it glides
+  const keep = [...col.querySelectorAll('.f-s')].find(e => Math.abs(+e.dataset.s - s) <= F_R);
+  const aTop = keep ? keep.getBoundingClientRect().top : 0;
+  const have = new Map([...col.querySelectorAll('.f-s')].map(e => [+e.dataset.s, e]));
+  const lo = Math.max(0, s - F_R), hi = Math.min(M.sents.length - 1, s + F_R);
+  have.forEach((e, i) => { if (i < lo || i > hi) e.remove(); });
+  let prev = col.querySelector('#fRule');
+  for (let i = lo; i <= hi; i++) {
+    let e = have.get(i);
+    if (!e || !e.isConnected) { prev.insertAdjacentHTML('afterend', fSentHtml(i)); e = prev.nextElementSibling; e.classList.add('f-new'); }
+    prev = e;
+    const d = Math.abs(i - s);
+    e.dataset.d = Math.min(4, d); e.classList.toggle('cur', d === 0);
+    e.classList.toggle('before', i < s);
+  }
+  // the translation sits under the current sentence only
+  col.querySelectorAll('.f-tr').forEach(x => x.remove());
+  if (biOn()) { const tr = S.trans[transKey()] || []; col.querySelector('.f-s.cur')?.insertAdjacentHTML('afterend', `<div class="f-tr">${esc(tr[s] || '…')}</div>`); }
+  $('#fProg').textContent = `${s + 1} / ${M.sents.length}`;
+  // re-base: whatever was added above must not move what is on screen
+  let ty = S.fTy || 0;
+  if (anim && keep && keep.isConnected) { const d = keep.getBoundingClientRect().top - aTop; ty -= d; col.style.transition = 'none'; col.style.transform = `translate3d(0,${ty.toFixed(1)}px,0)`; void col.offsetHeight; }
+  col.querySelectorAll('.f-new').forEach(e => { e.classList.remove('f-new'); if (anim && !rm) { e.style.transition = 'none'; e.style.opacity = '0'; void e.offsetHeight; e.style.transition = ''; e.style.opacity = ''; } });
+  S.fTy = ty;
+  col.style.transition = anim && !rm ? '' : 'none';
+  focusPlace(anim && !rm);
+  if (!anim || rm) requestAnimationFrame(() => { col.style.transition = ''; });
+  focusWord(S.curW >= 0 && M.words[S.curW]?.s === s ? S.curW : M.sents[s].words[0]);
+}
+/** settle the current sentence at the reading line (or, when it is taller than the stage, keep the spoken line there) */
+function focusPlace(anim, wEl) {
+  const stage = $('#fStage'), col = $('#fCol'), cur = col && col.querySelector('.f-s.cur'); if (!cur) return;
+  const sh = stage.clientHeight, focal = Math.round(sh * 0.42);
+  const top = cur.offsetTop, h = cur.offsetHeight + (cur.nextElementSibling?.classList.contains('f-tr') ? cur.nextElementSibling.offsetHeight + 8 : 0);
+  let y;
+  if (h < sh * 0.62) y = focal - top - h / 2;
+  else {
+    y = Math.round(sh * 0.16) - top; // tall: start at the top of the stage…
+    if (wEl) { const lt = wEl.offsetTop + cur.offsetTop; const want = focal - lt; if (want < y) y = Math.max(want, sh * 0.62 - top - h); } // …and follow the spoken line down
+  }
+  if (Math.abs(y - (S.fTy || 0)) < 0.5 && col.style.transform) return;
+  S.fTy = y;
+  col.style.transform = `translate3d(0,${y.toFixed(1)}px,0)`;
+  // the guiding rule beside the sentence glides with it
+  const rule = $('#fRule');
+  if (rule) rule.style.transform = `translate3d(0,${(top + 4).toFixed(1)}px,0) scaleY(${Math.max(0.2, (h - 8) / 100).toFixed(3)})`;
+}
+function focusLeave() {
+  // back in the book exactly where focus was
+  const el = S.wordEls[S.curW];
+  if (el) requestAnimationFrame(() => { scrollEl(el, false); positionHL(true); });
+}
+function focusGo(dir) {
+  const M = S.model; if (!M) return;
+  if (S.mode === 'listen' && (player.playing || player.paused)) { player.skip(dir); return; }
+  const s = Math.max(0, Math.min(M.sents.length - 1, Math.max(0, S.curS) + dir)); if (s === S.curS) return;
+  focusTo(s);
+}
+function focusTo(s) {
+  const M = S.model; if (!M?.sents[s]) return;
+  if (S.mode === 'listen' && (player.playing || player.paused)) { unlockAudio(); startPlayback(M.sents[s].words[0]); return; }
+  setCurrent(M.sents[s].words[0], false); S.book.pos = placeOf(S.curW); savePosSoon(); renderFocus();
 }
 function focusWord(w) {
-  const cur = $('#fStage .cur'); if (!cur) return;
+  const cur = $('#fStage .f-s.cur'); if (!cur) return;
   const active = S.mode === 'listen' && (player.playing || player.paused);
   cur.classList.toggle('speaking', active);
   cur.querySelectorAll('.w').forEach(el => { const i = +el.dataset.fw; el.classList.toggle('cw', active && i === w); el.classList.toggle('done', active && i < w); });
   const stage = $('#fStage');
   let host = stage && stage.querySelector('.f-hls');
   if (host) host.replaceChildren();
-  heroWord(active ? w : -1);
   const el = cur.querySelector('.w.cw');
   if (!el) return;
+  if (cur.offsetHeight > stage.clientHeight * 0.62) focusPlace(!REDUCED_MOTION.matches, el);
   const bits = [...el.getClientRects()].filter(r => r.width > 0.5 && r.height > 0.5);
   if (!bits.length) return;
   const g0 = glyphBox(el, bits[0]);
@@ -1937,44 +2217,50 @@ function focusWord(w) {
     el.style.setProperty('--fhl-padx', padX.toFixed(2) + 'px');
     return;
   }
-  // split across lines: one fixed-height pill per fragment (the ::before box would be the union)
+  // split across lines: one fixed-height pill per fragment, painted in the column (so they glide with it)
   el.classList.add('split');
-  if (!host) { host = document.createElement('div'); host.className = 'f-hls'; stage.appendChild(host); }
-  const sr = stage.getBoundingClientRect();
+  const col = $('#fCol');
+  if (!host) { host = document.createElement('div'); host.className = 'f-hls'; col.appendChild(host); }
+  const cr = col.getBoundingClientRect();
   bits.forEach(r0 => {
     const g = glyphBox(el, r0);
     const pill = document.createElement('i'); pill.className = 'f-hl';
-    pill.style.transform = `translate(${(r0.left - sr.left - padX).toFixed(2)}px, ${(g.top - sr.top).toFixed(2)}px)`;
+    pill.style.transform = `translate(${(r0.left - cr.left - padX).toFixed(2)}px, ${(g.top - cr.top).toFixed(2)}px)`;
     pill.style.width = (r0.width + padX * 2).toFixed(2) + 'px';
     pill.style.height = g0.height.toFixed(2) + 'px';
     host.appendChild(pill);
   });
 }
-// focus (1.6.2): the spoken word itself, big and centred on a solid orange pill; the sentence sits under it
-function heroWord(w) {
-  const box = $('#fWord'), sp = box && box.firstElementChild; if (!sp || !S.model) return;
-  const idle = w < 0, cur = S.model.sents[Math.max(0, S.curS)];
-  const wi = idle ? (S.curW >= 0 ? S.curW : cur.words[0]) : w;
-  const raw = (S.model.words[wi]?.t || '').trim();
-  const txt = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '') || raw;
-  if (box.dataset.w === String(wi) && box.classList.contains('idle') === idle) return;
-  box.dataset.w = wi; box.classList.toggle('idle', idle);
-  sp.textContent = txt;
-  const avail = Math.max(140, (box.clientWidth || innerWidth - 60) - 4);
-  sp.style.fontSize = '58px'; const wd = sp.scrollWidth; // measured, so long words shrink to fit instead of being cut
-  if (wd > avail) sp.style.fontSize = Math.max(22, Math.floor(58 * avail / wd)) + 'px';
-  if (!idle && !REDUCED_MOTION.matches) sp.animate?.([{ transform: 'scale(.9)', opacity: .55 }, { transform: 'none', opacity: 1 }], { duration: 150, easing: 'cubic-bezier(.2,.8,.2,1)' });
-}
 function toggleFocus(on = !prefs.focus) { prefs.focus = on; savePrefs(); renderFocus(true); }
 $('#fClose').onclick = () => toggleFocus(false);
+// tap a sentence to bring it into focus; tap the one in focus (or the lower part of the stage) to move on
 $('#fStage').addEventListener('click', e => {
-  const wEl = e.target.closest('[data-fw]');
-  if (S.mode === 'listen' && wEl) { unlockAudio(); startPlayback(+wEl.dataset.fw); return; }
-  const dir = e.clientX < innerWidth / 3 ? -1 : 1;
-  if (S.mode === 'listen') { player.skip(dir); return; }
-  const s = Math.max(0, Math.min(S.model.sents.length - 1, S.curS + dir));
-  setCurrent(S.model.sents[s].words[0], false); S.book.pos = placeOf(S.curW); savePosSoon(); renderFocus();
+  if (Date.now() - (S.fSwipe || 0) < 400) return;
+  const M = S.model; if (!M) return;
+  const sEl = e.target.closest('.f-s'), wEl = e.target.closest('[data-fw]');
+  if (sEl && !sEl.classList.contains('cur')) { fx('tap'); focusTo(+sEl.dataset.s); return; }
+  if (sEl && wEl && S.mode === 'listen') { unlockAudio(); startPlayback(+wEl.dataset.fw); return; }
+  const r = $('#fStage').getBoundingClientRect();
+  fx('tap'); focusGo(sEl ? 1 : (e.clientY < r.top + r.height * 0.4 ? -1 : 1));
 });
+// swipe up: next sentence; swipe down: the one before
+(() => {
+  const st = $('#fStage'); let y0 = null, x0 = 0, t0 = 0;
+  st.addEventListener('touchstart', e => { const t = e.touches[0]; y0 = t.clientY; x0 = t.clientX; t0 = Date.now(); }, { passive: true });
+  st.addEventListener('touchmove', e => { if (y0 !== null) e.preventDefault(); }, { passive: false });
+  st.addEventListener('touchend', e => {
+    if (y0 === null) return; const t = e.changedTouches[0], dy = t.clientY - y0, dx = t.clientX - x0; y0 = null;
+    if (Math.abs(dy) > 36 && Math.abs(dy) > Math.abs(dx) && Date.now() - t0 < 800) { S.fSwipe = Date.now(); fx('tap'); focusGo(dy < 0 ? 1 : -1); }
+  }, { passive: true });
+  let wt = 0;
+  st.addEventListener('wheel', e => { e.preventDefault(); if (Date.now() - wt < 420 || Math.abs(e.deltaY) < 8) return; wt = Date.now(); focusGo(e.deltaY > 0 ? 1 : -1); }, { passive: false });
+  document.addEventListener('keydown', e => {
+    if (!prefs.focus || S.screen !== 'reader' || $('#sheet').classList.contains('show')) return;
+    if (['ArrowDown', 'ArrowRight', 'PageDown'].includes(e.key)) { e.preventDefault(); focusGo(1); }
+    else if (['ArrowUp', 'ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); focusGo(-1); }
+  });
+})();
+window.addEventListener('resize', () => { if (prefs.focus && $('#fCol')) { $('#fCol').style.transition = 'none'; focusPlace(false); requestAnimationFrame(() => { const c = $('#fCol'); if (c) c.style.transition = ''; }); } });
 
 /* ------------------------------ translated reading ------------------------------ */
 async function enterTrOnly(to) {
@@ -2633,10 +2919,8 @@ function capSync() {
   const rd = $('#reader'); if (!rd || !S.model || !S.book) return;
   rd.classList.toggle('lm', S.mode === 'listen');
   $('#pPlay').setAttribute('aria-label', player.playing ? 'Pause' : 'Play');
-  const pg = prefs.pages ? pageInfo() : null;
-  let txt;
-  if (pg) txt = `${t('pageShort')} ${pg.i + 1} ${t('ofT')} ${pg.n}`;
-  else { const tot = Math.max(1, Math.round(secWords().reduce((a, x) => a + x, 0) / 260)); txt = `${t('pageShort')} ${Math.min(tot, Math.floor(bookProg().f * tot) + 1)} ${t('ofT')} ${tot}`; }
+  // 1.7.1: one pagination for both modes (the scroll stream's dividers carry the same numbers)
+  const tot = pgTotal(), txt = `${t('pageShort')} ${Math.min(tot, pageNow())} ${t('ofT')} ${tot}`;
   const el = $('#cInfoS'); if (el && el.textContent !== txt) el.textContent = txt;
   $('#pSpeed').textContent = fmtRate(prefs.rate);
 }
@@ -2709,5 +2993,5 @@ function closeSpeedTrack() { if (capState() === 'speed') setCapState(S.mode === 
   $('#dock').addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.closest('#dSeg') || b.id === 'pPlay' || b.id === 'pSpeed') return; fx('tap'); });
 })();
 
-window.murmur = { capSync, setCapState, capState, openSpeedTrack, closeSpeedTrack, spdPaint, fx, openAppSettings, S, prefs, player, APP_VERSION, openStudio, pagesLive, applyListenMarks, clearListenMarks, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices,  saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
+window.murmur = { paginate, pgMeasureProbe, pgMeasureColumns, pageNoOfWord, pgTotal, pageNow, buildPeek, pgColH, capSync, setCapState, capState, openSpeedTrack, closeSpeedTrack, spdPaint, fx, openAppSettings, S, prefs, player, APP_VERSION, openStudio, pagesLive, applyListenMarks, clearListenMarks, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices,  saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
 boot();
