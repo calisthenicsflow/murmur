@@ -1,19 +1,19 @@
-import { db } from './db.js?v=1.6.0';
-import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.6.0';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.6.0';
-import { coverSVG, autoCover } from './covers.js?v=1.6.0';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.6.0';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.6.0';
-import { Player } from './player.js?v=1.6.0';
-import { translateMany } from './translate.js?v=1.6.0';
-import { track, summary } from './stats.js?v=1.6.0';
-import { renderCard, shareCard } from './quotes.js?v=1.6.0';
-import { openStudio, defaultStyle } from './studio.js?v=1.6.0';
-import { presetById, FORMATS } from './qrender.js?v=1.6.0';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.6.0';
-import { SAMPLES } from './samples.js?v=1.6.0';
+import { db } from './db.js?v=1.6.1';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.6.1';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.6.1';
+import { coverSVG, autoCover } from './covers.js?v=1.6.1';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.6.1';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.6.1';
+import { Player } from './player.js?v=1.6.1';
+import { translateMany } from './translate.js?v=1.6.1';
+import { track, summary } from './stats.js?v=1.6.1';
+import { renderCard, shareCard } from './quotes.js?v=1.6.1';
+import { openStudio, defaultStyle } from './studio.js?v=1.6.1';
+import { presetById, FORMATS } from './qrender.js?v=1.6.1';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.6.1';
+import { SAMPLES } from './samples.js?v=1.6.1';
 
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.6.1';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -90,6 +90,7 @@ const keepWordInView = debounce(() => { if (S.screen === 'reader' && S.curW >= 0
 /* ------------------------------ navigation ------------------------------ */
 function show(id, push = true) {
   const from = S.screen; if (from === id) return;
+  $('#coach')?.classList.remove('show'); clearTimeout(S.coachT); // a tip belongs to the screen it was shown on
   $$('.screen').forEach(s => s.classList.remove('active', 'behind'));
   $('#' + id).classList.add('active');
   if (id !== 'library') $('#library').classList.add('behind');
@@ -854,7 +855,7 @@ function positionHL(instant) {
   if (same) return;
   const jump = instant || !hlLast || !$('#hl')?.classList.contains('on') || hlLast.el === el || hlLast.n !== places.length || Math.abs(hlLast.y - p0.y) > H * 0.5;
   const pills = hlPills(places.length);
-  // 1.6.0 "drop" morph: to the next word on the same line the pill's leading edge flows ahead
+  // 1.6.1 "drop" morph: to the next word on the same line the pill's leading edge flows ahead
   // (stretching over the gap, slightly thinner), then the trailing edge catches up. Only the
   // pill in #hls animates — nothing inside the text / CSS columns changes (1.4.2 flicker fix).
   const morph = !jump && places.length === 1 && hlLast.n === 1 && !REDUCED_MOTION.matches && Math.abs(hlLast.y - p0.y) < 1 &&
@@ -934,7 +935,7 @@ function layoutPages() {
     if (sc.scrollTop) sc.scrollTop = 0;
     const pw = pageW();
     const top = rdTopPx();
-    const bottom = 124 + envInset('bottom');
+    const bottom = 78 + envInset('bottom'); // 1.6.1: the page runs down to a compact corner orb (no strip / bar band)
     const h = Math.max(80, Math.round(sc.clientHeight - top - bottom));
     const key = pw + '|' + top + '|' + bottom + '|' + h;
     if (S._pgKey === key) return; // nothing changed — touching column CSS here makes WebKit flash the page
@@ -1911,9 +1912,9 @@ function renderFocus(force) {
   f.dataset.s = s;
   const tr = S.trans[transKey()] || [];
   const ctx = i => sents[i] ? `<div class="f-s ctx">${esc(sents[i].text)}</div>` : '<div class="f-s ctx"></div>';
-  $('#fStage').innerHTML = `${ctx(s - 1)}<div class="f-s cur f-enter${player.playing ? ' speaking' : ''}${sents[s].text.length > 330 ? ' xlong' : sents[s].text.length > 210 ? ' long' : ''}">${sents[s].words.map(w => `<span class="w" data-fw="${w}">${esc(words[w].t)}</span>${words[w].ns ? '' : ' '}`).join('').trimEnd()}</div>${biOn() ? `<div class="f-tr f-enter">${esc(tr[s] || '…')}</div>` : ''}${ctx(s + 1)}`;
+  $('#fStage').innerHTML = `<div class="f-word idle" id="fWord" aria-live="off"><span></span></div><div class="f-s cur f-enter${player.playing ? ' speaking' : ''}${sents[s].text.length > 330 ? ' xlong' : sents[s].text.length > 210 ? ' long' : ''}">${sents[s].words.map(w => `<span class="w" data-fw="${w}">${esc(words[w].t)}</span>${words[w].ns ? '' : ' '}`).join('').trimEnd()}</div>${biOn() ? `<div class="f-tr f-enter">${esc(tr[s] || '…')}</div>` : ''}${ctx(s + 1)}`;
   $('#fProg').textContent = `${s + 1} / ${sents.length}`;
-  if (S.curW >= 0) focusWord(S.curW);
+  focusWord(S.curW >= 0 ? S.curW : sents[s].words[0]);
 }
 function focusWord(w) {
   const cur = $('#fStage .cur'); if (!cur) return;
@@ -1923,12 +1924,13 @@ function focusWord(w) {
   const stage = $('#fStage');
   let host = stage && stage.querySelector('.f-hls');
   if (host) host.replaceChildren();
+  heroWord(active ? w : -1);
   const el = cur.querySelector('.w.cw');
   if (!el) return;
   const bits = [...el.getClientRects()].filter(r => r.width > 0.5 && r.height > 0.5);
   if (!bits.length) return;
   const g0 = glyphBox(el, bits[0]);
-  const padX = Math.max(3.5, g0.fs * 0.16);
+  const padX = Math.max(3, g0.fs * 0.1);
   if (bits.length === 1) {
     el.classList.remove('split');
     const box = bits[0];
@@ -1949,6 +1951,21 @@ function focusWord(w) {
     pill.style.height = g0.height.toFixed(2) + 'px';
     host.appendChild(pill);
   });
+}
+// focus (1.6.1): the spoken word itself, big and centred on a solid orange pill; the sentence sits under it
+function heroWord(w) {
+  const box = $('#fWord'), sp = box && box.firstElementChild; if (!sp || !S.model) return;
+  const idle = w < 0, cur = S.model.sents[Math.max(0, S.curS)];
+  const wi = idle ? (S.curW >= 0 ? S.curW : cur.words[0]) : w;
+  const raw = (S.model.words[wi]?.t || '').trim();
+  const txt = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '') || raw;
+  if (box.dataset.w === String(wi) && box.classList.contains('idle') === idle) return;
+  box.dataset.w = wi; box.classList.toggle('idle', idle);
+  sp.textContent = txt;
+  const avail = Math.max(140, (box.clientWidth || innerWidth - 60) - 4);
+  sp.style.fontSize = '58px'; const wd = sp.scrollWidth; // measured, so long words shrink to fit instead of being cut
+  if (wd > avail) sp.style.fontSize = Math.max(22, Math.floor(58 * avail / wd)) + 'px';
+  if (!idle && !REDUCED_MOTION.matches) sp.animate?.([{ transform: 'scale(.9)', opacity: .55 }, { transform: 'none', opacity: 1 }], { duration: 150, easing: 'cubic-bezier(.2,.8,.2,1)' });
 }
 function toggleFocus(on = !prefs.focus) { prefs.focus = on; savePrefs(); renderFocus(true); }
 $('#pFocus').onclick = () => toggleFocus();
@@ -2181,9 +2198,8 @@ function wireMark(el, repaint) {
 $('#rdMore').onclick = () => {
   const b = S.book;
   const langs = TR_LANGS.filter(l => l !== b.lang).map(l => `<option value="${l}" ${l === biTarget() ? 'selected' : ''}>${esc(langName(l, uiLang()))}</option>`).join('');
-  openSheet(`<div class="sh-title">${t('settings')}<button class="x" data-close>${ICON.x}</button></div>
-    <div class="sh-label">${t('readingVoice')}</div>
-    <div class="row" style="cursor:default"><div class="ic">${ICON.tr}</div><div class="tx"><b>${t('translateTo')}</b></div><select id="biTo" class="row-select" aria-label="${t('translateTo')}">${langs}</select></div>
+  openSheet(`<div class="sh-title">${t('readingVoice')}<button class="x" data-close>${ICON.x}</button></div>
+    <div class="row" style="cursor:default;align-items:center"><div class="ic">${ICON.tr}</div><div class="tx"><b>${t('translateTo')}</b></div><select id="biTo" class="row-select" aria-label="${t('translateTo')}">${langs}</select></div>
     <div class="row" data-tg="both"><div class="ic">${ICON.headph}</div><div class="tx"><b>${t('readTr')}</b><small>${t('readTrHint')}</small></div><i class="sw ${prefs.readTr ? 'on' : ''}"></i></div>
     <div class="row" data-tg="followHl"><div class="ic">${ICON.follow}</div><div class="tx"><b>${t('followHl')}</b><small>${t('followHlHint')}</small></div><i class="sw ${followOn() ? 'on' : ''}"></i></div>
     <div class="row" data-tg="skip"><div class="ic">${ICON.wand}</div><div class="tx"><b>${t('skipFiller')}</b><small>${t('skipFillerHint')}</small></div><i class="sw ${prefs.skip ? 'on' : ''}"></i></div>
@@ -2580,11 +2596,11 @@ function reloadWhenIdle(ver) {
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
 
-/* ------------------------------ orbit: round player + hold-for-orbits menu (1.6.0) ------------------------------ */
+/* ------------------------------ orbit: round player + hold-for-orbits menu (1.6.1) ------------------------------ */
 // The reading view shows only the orb. Tap = play / pause. Hold = the orbits: inner ring (modes), outer ring (speed,
 // theme, text, more). Options apply in place and the menu stays; tap the text (or the orb) to go back to reading.
 // Speed opens an arc slider on the same orbit.
-const SPD_MIN = 0.5, SPD_MAX = 3, SPD_MAG = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5];
+const SPD_TICKS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]; // the speed orbit snaps hard to these (1.6.1)
 const THEMES = ['paper', 'sepia', 'night'];
 function orbitSync() {
   const rd = $('#reader'); if (!rd || !S.model || !S.book) return;
@@ -2622,54 +2638,105 @@ const IC = {
   stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" style="fill:currentColor;stroke:none"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>'
 };
-function arcInner() {
-  const on = t('onShort'), off = t('off');
+function arcInner() { // state = the circle itself (orange = on); sub-labels only for real values, never on/off (1.6.1)
   return [
-    { k: 'voice', n: t('voice'), v: voiceShort(), ic: IC.voice },
-    { k: 'timer', n: t('sleepTimer'), v: S.timer ? ($('#dTimerTxt')?.textContent || '') : off, on: !!S.timer, ic: IC.timer },
-    { k: 'tr', n: t('translationT'), v: prefs.bi ? on : off, on: !!prefs.bi, ic: ICON.tr },
-    { k: 'focus', n: t('focusT'), v: prefs.focus ? on : off, on: !!prefs.focus, ic: IC.focus },
+    { k: 'voice', n: t('voice'), v: voiceShort() === '—' ? '' : voiceShort(), ic: IC.voice },
+    { k: 'timer', n: t('sleepTimer'), v: S.timer ? ($('#dTimerTxt')?.textContent || '') : '', on: !!S.timer, ic: IC.timer },
+    { k: 'tr', n: t('translationT'), v: '', on: !!prefs.bi, ic: ICON.tr },
+    { k: 'focus', n: t('focusT'), v: '', on: !!prefs.focus, ic: IC.focus },
     { k: 'pages', n: t('pagesMode'), v: prefs.pages ? t('pagesSide') : t('pagesScroll'), on: !!prefs.pages, ic: IC.pages }
   ];
 }
 function arcOuter() {
-  return [
+  return [ // «Ещё» lives in the top bar (⋯), not here — one place per setting
     { k: 'speed', v: fmtRate(prefs.rate), ic: IC.speed, n: t('speed') },
     { k: 'theme', v: t(prefs.theme), ic: '', n: t('theme') },
-    { k: 'text', v: `Aa ${prefs.fs}`, ic: '', n: t('textSize') },
-    { k: 'more', v: t('moreT'), ic: IC.more, n: t('moreT') }
+    { k: 'text', v: `Aa ${prefs.fs}`, ic: '', n: t('textSize') }
   ];
+}
+// collision-free layout (1.6.1): every circle, label and chip keeps >= GAP px from every other one and from the edges
+const ARC_GAP = 8;
+const rOver = (a, b, g) => a.l < b.r + g && b.l < a.r + g && a.t < b.b + g && b.t < a.b + g;
+const rAt = (x, y, w, h) => ({ l: x - w / 2, t: y - h / 2, r: x + w / 2, b: y + h / 2 });
+function arcLayout(g, top, inner, outer) {
+  const placed = [], bad = [], E = 8, bottom = g.H - 8;
+  const orbR = { l: g.cx - 62, t: g.cy - 62, r: g.cx + 62, b: g.cy + 62 };
+  const fits = (rc, gap = ARC_GAP) => rc.l >= E && rc.r <= g.W - E && rc.t >= top && rc.b <= bottom && !rOver(rc, orbR, 6) && !placed.some(p => rOver(rc, p, gap));
+  const n = inner.length, CR = 25;
+  // inner ring: as large as the space allows, circles evenly from 180° to 270°
+  const R1 = Math.max(118, Math.min(g.R1, g.cx - 8 - CR - 4, g.cy - top - CR - 4));
+  const circ = inner.map((it, i) => { const a = 180 + i * 90 / (n - 1), [x, y] = polar(g, R1, a); const rc = rAt(x, y, 2 * CR, 2 * CR); placed.push(rc); return { x, y, a, rc }; });
+  // labels: beside their circle, away from the ring first (outward), then inward, then left / up / right / down
+  const lab = inner.map((it, i) => {
+    const c = circ[i], out = c.a * Math.PI / 180;
+    const dirs = [out, out + Math.PI, Math.PI, -Math.PI / 2, 0, Math.PI / 2];
+    for (let k = 1; k < 8; k++) dirs.push(out + k * Math.PI / 4);
+    const tryAt = (w, h) => {
+      for (const extra of [6, 14, 26]) for (const d of dirs) {
+        const ux = Math.cos(d), uy = Math.sin(d), ext = Math.abs(ux) * w / 2 + Math.abs(uy) * h / 2, dist = CR + extra + ext;
+        let rc = rAt(c.x + ux * dist, c.y + uy * dist, w, h);
+        const sx = rc.l < E ? E - rc.l : rc.r > g.W - E ? g.W - E - rc.r : 0; // slide inside the screen edge
+        if (sx) rc = { l: rc.l + sx, r: rc.r + sx, t: rc.t, b: rc.b };
+        if (!placed.some((p, j) => j !== i && rOver(rc, p, ARC_GAP)) && rc.l >= E && rc.r <= g.W - E && rc.t >= top && rc.b <= bottom && !rOver(rc, orbR, 6) && !rOver(rc, c.rc, 3)) return rc;
+      }
+      return null;
+    };
+    let rc = tryAt(it.w, it.h);
+    if (!rc && it.v) { rc = tryAt(it.w1 || it.w, it.h1 || it.h); if (rc) it.one = true; } // no room: one line, name only
+    if (!rc) { bad.push(it.k); rc = rAt(c.x - CR - 6 - it.w / 2, c.y, it.w, it.h); }
+    placed.push(rc); return rc;
+  });
+  // chips: on the outer orbit, nearest free spot to their preferred angle
+  const R2 = R1 + 122, pref = [200, 230, 258];
+  const chips = outer.map((it, i) => {
+    for (const dr of [0, 14, -14, 28, -28, 44, 60]) for (let k = 0; k <= 45; k++) for (const sg of k ? [1, -1] : [1]) {
+      const a = pref[i] + sg * k * 2; if (a < 176 || a > 274) continue;
+      const [x, y] = polar(g, R2 + dr, a), rc = rAt(x, y, it.w, it.h);
+      if (fits(rc)) { placed.push(rc); return rc; }
+    }
+    bad.push(it.k); const [x, y] = polar(g, R2, pref[i]); const rc = rAt(x, y, it.w, it.h); placed.push(rc); return rc;
+  });
+  return { R1, R2, circ, lab, chips, bad };
 }
 function renderArc() {
   const m = $('#arcm'), box = $('#arcItems'); if (!m || !box) return;
   const g = arcGeo(), sp = m.classList.contains('spd'), lm = S.mode === 'listen';
   let h = '', head = '';
   if (sp) {
-    head = `<div class="arc-row"><button class="ach" data-k="orbits">${IC.back}<span>${t('orbitsT')}</span></button><button class="ach" data-k="rate1">1.0×</button></div>
-      <b class="ttl">${t('speed')}</b><div class="spv" id="spv">${fmtRate(prefs.rate)}</div><div class="st">${t('speedHint')}</div>`;
-    const RS = g.RS, [x0, y0] = polar(g, RS, 180), [x1, y1] = polar(g, RS, 270);
-    const ticks = [0.5, 1, 1.5, 2, 2.5, 3].map(v => { const a = 180 + (v - SPD_MIN) / (SPD_MAX - SPD_MIN) * 90, [tx, ty] = polar(g, RS, a), [lx, ly] = polar(g, RS + 34, a);
-      return `<circle class="tk" cx="${tx.toFixed(1)}" cy="${ty.toFixed(1)}" r="2.2"/><text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}">${v}</text>`; }).join('');
-    h = `<svg class="arc-sl" style="width:${g.W}px;height:${g.H}px" viewBox="0 0 ${g.W} ${g.H}"><path class="tr" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${RS} ${RS} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}"/>
-      <path class="fl" id="spFill" d=""/>${ticks}<circle class="kn" id="spKnob" r="17" cx="0" cy="0"/></svg>`;
+    head = `<div class="arc-row bare"><button class="ach" data-k="orbits">${IC.back}<span>${t('orbitsT')}</span></button><button class="ach" data-k="rate1">1.0×</button></div>`;
   } else {
-    head = `<b class="ttl">${t('orbitTitle')}</b><div class="st" id="arcSt"></div>${lm ? `<div class="arc-row"><button class="ach" data-k="prev" aria-label="${t('prevT')}">${IC.prev}</button><button class="ach" data-k="stop">${IC.stop}<span>${t('read')}</span></button><button class="ach" data-k="next" aria-label="${t('nextT')}">${IC.next}</button></div>` : ''}`;
-    arcInner().forEach((it, i) => {
-      const [x, y] = polar(g, g.R1, 180 + i * 22.5), [lx, ly] = polar(g, g.R1 + 58, 180 + i * 22.5);
-      h += `<button class="rb ${it.on ? 'on' : ''}" data-k="${it.k}" style="left:${(x - 26).toFixed(0)}px;top:${(y - 26).toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}</button>`;
-      h += `<div class="rl" style="left:${Math.max(4, Math.min(g.W - 92, lx - 44)).toFixed(0)}px;top:${(ly - 17).toFixed(0)}px"><b>${esc(it.n)}</b><span>${esc(it.v)}</span></div>`;
-    });
-    arcOuter().forEach((it, i) => {
-      const [x, y] = polar(g, g.R2, [190, 210, 236, 260][i]);
-      h += `<button class="ch ${it.k === 'speed' ? 'acc' : ''}" data-k="${it.k}" style="left:${Math.max(56, Math.min(g.W - 56, x)).toFixed(0)}px;top:${(y - 19).toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}<span>${esc(it.v)}</span></button>`;
-    });
+    head = ''; // 1.6.1 (t170u): no title, status line or transport row — just the orbits
   }
   $('#arcTtl').innerHTML = head;
-  box.innerHTML = h;
+  m.style.setProperty('--ox', g.cx.toFixed(0) + 'px'); m.style.setProperty('--oy', g.cy.toFixed(0) + 'px'); m.style.setProperty('--dr', Math.round(Math.max(g.R2 + 150, Math.min(g.cy, g.cx) * 1.05)) + 'px');
+  const card = $('#arcTtl .arc-row') || $('#reader .rd-bar'), top = card ? card.getBoundingClientRect().bottom - g.rr.top + ARC_GAP + 4 : 140;
   const t1 = m.querySelector('.a1'), t2 = m.querySelector('.a2');
-  Object.assign(t1.style, { left: g.cx - g.R1 + 'px', top: g.cy - g.R1 + 'px', width: 2 * g.R1 + 'px', height: 2 * g.R1 + 'px' });
-  Object.assign(t2.style, { left: g.cx - g.R2 + 'px', top: g.cy - g.R2 + 'px', width: 2 * g.R2 + 'px', height: 2 * g.R2 + 'px' });
-  if (sp) spPaint(prefs.rate); else arcStatus();
+  const ring = (el, R) => Object.assign(el.style, { left: g.cx - R + 'px', top: g.cy - R + 'px', width: 2 * R + 'px', height: 2 * R + 'px' });
+  if (sp) {
+    const RS = g.RS, [x0, y0] = polar(g, RS, 180), [x1, y1] = polar(g, RS, 270);
+    h = `<svg class="arc-sl" style="width:${g.W}px;height:${g.H}px" viewBox="0 0 ${g.W} ${g.H}"><path class="tr" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${RS} ${RS} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}"/>
+      <path class="fl" id="spFill" d=""/>${SPD_TICKS.map(v => { const a = spAngle(v), [x0, y0] = polar(g, RS - 11, a), [x1, y1] = polar(g, RS + 11, a); return `<line class="tk" data-v="${v}" x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}"/>`; }).join('')}<circle class="kn" id="spKnob" r="17" cx="0" cy="0"/></svg>`;
+    h += SPD_TICKS.filter(v => v !== 1.25 && v !== 1.75).map(v => { const [lx, ly] = polar(g, RS - 42, spAngle(v)); return `<span class="sk" data-v="${v}" style="left:${lx.toFixed(0)}px;top:${ly.toFixed(0)}px">${String(v).replace(/^0/, '')}</span>`; }).join('');
+    h += `<span class="spk" id="spv"></span>`;
+    box.innerHTML = h; ring(t1, g.R1); ring(t2, g.R2); spPaint(prefs.rate); return;
+  }
+  // measure, then place
+  const inner = arcInner(), outer = arcOuter();
+  box.innerHTML = inner.map(it => `<div class="rl"><b>${esc(it.n)}</b>${it.v ? `<span>${esc(it.v)}</span>` : ''}</div>`).join('') + inner.map(it => `<div class="rl"><b>${esc(it.n)}</b></div>`).join('') +
+    outer.map(it => `<button class="ch ${it.k === 'speed' ? 'acc' : ''}">${it.ic}<span>${esc(it.v)}</span></button>`).join('');
+  const ms = [...box.children].map(el => [el.offsetWidth, el.offsetHeight]);
+  inner.forEach((it, i) => { [it.w, it.h] = ms[i]; [it.w1, it.h1] = ms[inner.length + i]; });
+  outer.forEach((it, i) => { [it.w, it.h] = ms[2 * inner.length + i]; });
+  const L = arcLayout(g, top, inner, outer);
+  inner.forEach((it, i) => {
+    const c = L.circ[i], r = L.lab[i];
+    h += `<button class="rb ${it.on ? 'on' : ''}" data-k="${it.k}" style="left:${(c.x - 25).toFixed(0)}px;top:${(c.y - 25).toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}</button>`;
+    h += `<div class="rl" data-for="${it.k}" style="left:${r.l.toFixed(0)}px;top:${r.t.toFixed(0)}px"><b>${esc(it.n)}</b>${it.v && !it.one ? `<span>${esc(it.v)}</span>` : ''}</div>`;
+  });
+  outer.forEach((it, i) => { const r = L.chips[i];
+    h += `<button class="ch ${it.k === 'speed' ? 'acc' : ''}" data-k="${it.k}" style="left:${r.l.toFixed(0)}px;top:${r.t.toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}<span>${esc(it.v)}</span></button>`; });
+  box.innerHTML = h; m.dataset.bad = L.bad.join(',');
+  ring(t1, L.R1); ring(t2, L.R2);
 }
 function openArc(speed = false) {
   const rd = $('#reader'), m = $('#arcm'); if (!rd || !m) return;
@@ -2683,19 +2750,24 @@ function openArc(speed = false) {
 function closeArc() { const m = $('#arcm'); if (!m) return; m.classList.remove('show', 'spd'); m.setAttribute('aria-hidden', 'true'); $('#reader').classList.remove('arc-on'); $$('#arcm .hov').forEach(x => x.classList.remove('hov')); }
 const arcOpen = () => !!$('#arcm')?.classList.contains('show');
 /* speed slider on the orbit */
-const spAngle = v => 180 + (v - SPD_MIN) / (SPD_MAX - SPD_MIN) * 90;
+// ticks are spread evenly over the quarter orbit; an off-tick saved rate sits between its neighbours
+function spAngle(v) {
+  const T = SPD_TICKS, n = T.length - 1;
+  if (v <= T[0]) return 180; if (v >= T[n]) return 270;
+  const i = T.findIndex((x, j) => v >= x && v <= T[j + 1]);
+  return 180 + (i + (v - T[i]) / (T[i + 1] - T[i])) * 90 / n;
+}
 function spValue(deg) {
-  let v = SPD_MIN + (Math.max(180, Math.min(270, deg)) - 180) / 90 * (SPD_MAX - SPD_MIN);
-  v = Math.round(v * 20) / 20;
-  const mg = SPD_MAG.find(x => Math.abs(x - v) <= 0.04); if (mg) v = mg;
-  return Math.max(SPD_MIN, Math.min(SPD_MAX, +v.toFixed(2)));
+  const n = SPD_TICKS.length - 1, f = (Math.max(180, Math.min(270, deg)) - 180) / 90 * n;
+  return SPD_TICKS[Math.round(f)];
 }
 function spPaint(v) {
   const g = arcGeo(), a = spAngle(v), [x0, y0] = polar(g, g.RS, 180), [kx, ky] = polar(g, g.RS, a);
   const f = $('#spFill'), k = $('#spKnob'); if (!f || !k) return;
   f.setAttribute('d', a > 180.2 ? `M${x0.toFixed(1)} ${y0.toFixed(1)} A${g.RS} ${g.RS} 0 0 1 ${kx.toFixed(1)} ${ky.toFixed(1)}` : '');
   k.setAttribute('cx', kx.toFixed(1)); k.setAttribute('cy', ky.toFixed(1));
-  const sv = $('#spv'); if (sv) sv.textContent = fmtRate(v);
+  const sv = $('#spv'); if (sv) { const [px, py] = polar(g, g.RS + 42, a); sv.textContent = fmtRate(v); sv.style.left = px.toFixed(0) + 'px'; sv.style.top = py.toFixed(0) + 'px'; }
+  $$('#arcm .sk').forEach(e => e.classList.toggle('on', Math.abs(+e.dataset.v - v) < 0.001));
 }
 function setRateNow(v) {
   prefs.rate = v; savePrefs(); player.setRate(v); $('#pSpeed').textContent = fmtRate(v); updateProgress();
@@ -2746,7 +2818,7 @@ const arcAt = (x, y) => document.elementFromPoint(x, y)?.closest('#arcm [data-k]
   const spDrag = e => {
     const g = arcGeo(), x = e.clientX - g.rr.left, y = e.clientY - g.rr.top;
     let deg = Math.atan2(y - g.cy, x - g.cx) * 180 / Math.PI; if (deg < 0) deg += 360; if (deg < 90) deg = 360; // below the orb's left: clamp to the slow end
-    const v = spValue(deg); drag.v = v; spPaint(v);
+    const v = spValue(deg); if (drag.v != null && v !== drag.v) navigator.vibrate?.(6); drag.v = v; spPaint(v);
   };
   m.addEventListener('pointerdown', e => {
     if (!m.classList.contains('spd') || e.target.closest('[data-k]')) return;

@@ -90,7 +90,7 @@ body[data-theme=sepia] .fc1{background:#F6EEDF}
 .rd-next button{border:1px solid var(--hair);background:var(--chip)}
 .rd-next .end{font-family:var(--display)}
 
-/* the orbit band (1.6.0): only the orb + its progress ring. No floor, no satellites — the text stays visible. */
+/* the orbit band (1.6.1): only the orb + its progress ring. No floor, no satellites — the text stays visible. */
 #reader .dock.orbit{display:block;position:absolute;left:auto;right:0;bottom:0;width:132px;height:calc(var(--safe-b) + 120px);padding:0;gap:0;z-index:30;pointer-events:none;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .orbit>*{pointer-events:auto}
@@ -133,11 +133,11 @@ body[data-theme=night] .o-ring .pr{filter:drop-shadow(0 0 3px var(--accent))}
 .arcm.show .rb,.arcm.show .ch{transform:none;opacity:1}
 .arcm .rb.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);box-shadow:var(--glow)}
 .arcm .rb.hov,.arcm .ch.hov,.ach.hov{transform:scale(1.12);border-color:var(--accent)}
-.arcm .rl{position:absolute;width:88px;display:flex;flex-direction:column;align-items:center;pointer-events:none;white-space:nowrap;font:500 11px/1.25 var(--ui);color:var(--ink2)}
+.arcm .rl{position:absolute;display:flex;flex-direction:column;align-items:center;background:var(--card);border:1px solid var(--chipB);border-radius:11px;padding:4px 9px 5px;pointer-events:none;white-space:nowrap;font:500 11px/1.25 var(--ui);color:var(--ink2)}
 .arcm .rl b{display:block;font:700 12px/1.2 var(--ui);color:var(--ink);max-width:88px;overflow:hidden;text-overflow:ellipsis}
-.arcm .rl b,.arcm .rl span{background:var(--bg);padding:1px 6px;border-radius:6px}
+.arcm .rl b,.arcm .rl span{background:none;padding:0}
 .arcm .rl span{margin-top:1px;max-width:88px;overflow:hidden;text-overflow:ellipsis}
-.arcm .ch{position:absolute;min-width:76px;max-width:108px;translate:-50% 0;height:38px;border-radius:19px;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 12px;background:var(--chip);border:1px solid var(--chipB);color:var(--ink);box-shadow:var(--sat-sh);font:600 13px/1 var(--ui);white-space:nowrap;transform:scale(.6);opacity:0;transition:transform .3s var(--spring),opacity .2s}
+.arcm .ch{position:absolute;min-width:76px;max-width:120px;height:38px;border-radius:19px;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 12px;background:var(--chip);border:1px solid var(--chipB);color:var(--ink);box-shadow:var(--sat-sh);font:600 13px/1 var(--ui);white-space:nowrap;transform:scale(.6);opacity:0;transition:transform .3s var(--spring),opacity .2s}
 .arcm .ch svg{width:15px;height:15px;stroke-width:1.8;flex:none}
 .arcm .ch span{overflow:hidden;text-overflow:ellipsis}
 .arcm .ch[data-k=text] span{font-family:var(--display);font-size:15px;font-weight:600;font-variant-numeric:lining-nums}
@@ -218,3 +218,46 @@ body[data-theme=night] .st-tile,body[data-theme=night] .st-week{border-color:rgb
 .st-fmt button.on{background:var(--accent);color:var(--accent-ink)}
 .st-actions .pill-black{background:var(--accent);color:var(--accent-ink);box-shadow:var(--glow)}
 .st-bookbtn,.st-pal,.st-save,.st-fmt{background:var(--chip);border-color:var(--hair)}
+
+/* 1.6.1: compact solid header card, label pills, scale pills — no full backdrop */
+.arcm .rb,.arcm .ch,.arcm .ach{background:var(--card)}
+.arcm .rb{width:50px;height:50px}
+.arcm .rb.on{background:var(--accent)}
+.arcm .rl b{font-size:12px}
+.arcm .rl span{font-size:11px;margin-top:1px}
+.arc-ttl{left:16px;right:auto;max-width:calc(100% - 32px)}
+.arc-card{display:inline-block;background:var(--card);border:1px solid var(--chipB);border-radius:18px;padding:10px 12px;box-shadow:var(--sat-sh);max-width:100%}
+.arc-card .st{display:block;background:none;padding:0;margin:0;max-width:none;font:500 13px/1.4 var(--ui);color:var(--ink2)}
+.arc-card .arc-row{margin:8px 0 0}
+.arc-card .arc-row:first-child{margin:0 0 8px}
+.arc-card .ach{height:36px;box-shadow:none}
+.arc-card .sph{display:flex;align-items:baseline;gap:10px;margin:2px 0 2px}
+.arc-card .ttl{display:inline;background:none;padding:0;margin:0;font-family:var(--display);font-style:italic;font-weight:500;font-size:24px;color:var(--ink)}
+.arc-card .spv{display:inline;background:none;padding:0;margin:0;font:600 40px/1 var(--display);font-variant-numeric:lining-nums;font-feature-settings:"lnum" 1;color:var(--ink);letter-spacing:-.02em}
+.arcm .sk{position:absolute;translate:-50% -50%;background:var(--card);border:1px solid var(--chipB);border-radius:9px;padding:2px 7px;font:700 12px/1.2 var(--ui);color:var(--ink2);font-variant-numeric:lining-nums;pointer-events:none;white-space:nowrap}
+
+/* 1.6.1 (t165u): radial dim centred on the orb — the one allowed gradient; fades in/out with .arcm opacity */
+:root{--dimc:40,28,16} body[data-theme=sepia]{--dimc:46,30,14} body[data-theme=night]{--dimc:0,0,0}
+.arcm{background:radial-gradient(circle var(--dr,520px) at var(--ox,85%) var(--oy,90%),rgba(var(--dimc),.4) 0,rgba(var(--dimc),.3) 28%,rgba(var(--dimc),.12) 62%,rgba(var(--dimc),0) 100%)}
+/* 1.6.1 (t166u): speed orbit — no header, discrete ticks, value pill beside the knob */
+.arc-row.bare{margin:0}
+.arc-sl line.tk{stroke:var(--ink2);stroke-width:2;stroke-linecap:round;opacity:.6;fill:none}
+.arcm .sk{font-size:11px;padding:2px 6px}
+.arcm .sk.on{color:var(--accent-deep);border-color:var(--accent)}
+.arcm .spk{position:absolute;translate:-50% -50%;background:var(--card);border:1.5px solid var(--accent);border-radius:12px;padding:4px 10px;font:700 17px/1.1 var(--ui);color:var(--ink);font-variant-numeric:lining-nums;pointer-events:none;white-space:nowrap;box-shadow:var(--sat-sh)}
+body[data-theme=night] .arcm .spk{box-shadow:0 0 10px rgba(255,90,31,.35)}
+/* 1.6.1 (t168u): pages mode — the column runs to the bottom; a compact orb sits in the corner under it */
+#reader.pages #pPlay.orb{right:20px;bottom:calc(var(--safe-b) + 10px);width:56px;height:56px}
+#reader.pages #pPlay.orb svg{width:22px;height:22px}
+#reader.pages .o-ring{right:14px;bottom:calc(var(--safe-b) + 4px);width:68px;height:68px}
+/* 1.6.1 (t169u): focus = the spoken word, big and centred on a solid orange pill (flat, light glow) */
+.f-stage{gap:26px}
+.f-word{display:flex;justify-content:center;align-items:center;min-height:96px}
+.f-word span{display:inline-block;max-width:100%;font-family:var(--serif);font-weight:600;line-height:1.15;letter-spacing:-.01em;padding:.1em .38em .14em;border-radius:20px;background:var(--accent);color:var(--accent-ink);box-shadow:0 0 22px -4px rgba(255,90,31,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:lining-nums}
+body[data-theme=paper] .f-word span,body[data-theme=sepia] .f-word span{box-shadow:0 0 16px -6px rgba(255,90,31,.6)}
+.f-word.idle span{background:transparent;color:var(--ink);box-shadow:none;border:1.5px dashed var(--chipB)}
+.f-s.cur .w{padding:0;margin:0}
+.f-s.cur{font-size:clamp(19px,5.4vw,23px);text-align:center}
+.f-s.cur.long{font-size:18px}.f-s.cur.xlong{font-size:16px}
+/* 1.6.1 QA: one size control in «Текст» (the slider with its number), not two */
+#fsSteps{display:none}
