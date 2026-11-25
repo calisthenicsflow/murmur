@@ -1,19 +1,19 @@
-import { db } from './db.js?v=1.5.0';
-import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.5.0';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.5.0';
-import { coverSVG, autoCover } from './covers.js?v=1.5.0';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.5.0';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.5.0';
-import { Player } from './player.js?v=1.5.0';
-import { translateMany } from './translate.js?v=1.5.0';
-import { track, summary } from './stats.js?v=1.5.0';
-import { renderCard, shareCard } from './quotes.js?v=1.5.0';
-import { openStudio, defaultStyle } from './studio.js?v=1.5.0';
-import { presetById, FORMATS } from './qrender.js?v=1.5.0';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.5.0';
-import { SAMPLES } from './samples.js?v=1.5.0';
+import { db } from './db.js?v=1.6.0';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.6.0';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.6.0';
+import { coverSVG, autoCover } from './covers.js?v=1.6.0';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.6.0';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.6.0';
+import { Player } from './player.js?v=1.6.0';
+import { translateMany } from './translate.js?v=1.6.0';
+import { track, summary } from './stats.js?v=1.6.0';
+import { renderCard, shareCard } from './quotes.js?v=1.6.0';
+import { openStudio, defaultStyle } from './studio.js?v=1.6.0';
+import { presetById, FORMATS } from './qrender.js?v=1.6.0';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.6.0';
+import { SAMPLES } from './samples.js?v=1.6.0';
 
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -371,7 +371,7 @@ async function openBook(id, autoplay = false) {
   renderSection(b.pos?.w || 0); renderTimer();
   // resuming somewhere inside the book: say where, briefly
   if ((b.pos?.sec || 0) > 0 || (b.pos?.w || 0) > 0) { const sn = S.model.sents[Math.max(0, S.curS)]?.text || ''; setTimeout(() => toast(t('continueFrom').replace('{x}', `«${sn.split(/\s+/).slice(0, 6).join(' ')}…» · ${fmtPct(bookProg().f)}`), 2600), 350); }
-  setTimeout(() => { if (S.screen === 'reader' && !prefs.bare && !uiBusy()) hint('tapHide', t('hintTapHide')); }, 1200);
+  setTimeout(() => { if (S.screen === 'reader' && !prefs.bare && !uiBusy()) hint('orbit2', t('hintOrbit2')); }, 1200);
   if (autoplay) { unlockAudio(); startPlayback(S.curW >= 0 ? S.curW : 0); }
 }
 function leaveReader() { player.stop(); savePos(); hidePop(); $('#focus').classList.remove('show'); updateMediaSession(); }
@@ -805,7 +805,16 @@ function hlPills(n) {
   });
   return [...host.children].slice(0, n);
 }
-function hideHL() { hlPills(0); hlLast = null; }
+function hideHL() { hlPills(0); hlLast = null; markWordInk(null); }
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
+/** pages mode: the spoken word's ink is recoloured with the CSS Custom Highlight API — a paint-only
+ *  change, so no class is toggled inside the CSS columns (1.4.2) and the word stays readable on the pill. */
+function markWordInk(el) {
+  if (!window.CSS?.highlights || typeof Highlight === 'undefined') return;
+  if (!el || !pagesLive()) { if (markWordInk._el) { CSS.highlights.delete('mm-cw'); markWordInk._el = null; } return; }
+  if (markWordInk._el === el) return;
+  try { const r = document.createRange(); r.selectNodeContents(el); CSS.highlights.set('mm-cw', new Highlight(r)); markWordInk._el = el; } catch {}
+}
 function positionHL(instant) {
   const el = (S.trEl && S.trEl.isConnected && S.trEl) || S.wordEls[S.curW];
   const active = S.mode === 'listen' && (player.playing || player.paused) && el && el.isConnected;
@@ -845,14 +854,32 @@ function positionHL(instant) {
   if (same) return;
   const jump = instant || !hlLast || !$('#hl')?.classList.contains('on') || hlLast.el === el || hlLast.n !== places.length || Math.abs(hlLast.y - p0.y) > H * 0.5;
   const pills = hlPills(places.length);
+  // 1.6.0 "drop" morph: to the next word on the same line the pill's leading edge flows ahead
+  // (stretching over the gap, slightly thinner), then the trailing edge catches up. Only the
+  // pill in #hls animates — nothing inside the text / CSS columns changes (1.4.2 flicker fix).
+  const morph = !jump && places.length === 1 && hlLast.n === 1 && !REDUCED_MOTION.matches && Math.abs(hlLast.y - p0.y) < 1 &&
+    Math.abs((p0.x + p0.w / 2) - (hlLast.x + hlLast.w / 2)) < Math.min(260, sc.clientWidth * 0.7);
   pills.forEach((hl, k) => {
     const p = places[k];
-    if (jump) hl.style.transition = 'none';
+    hl._anim?.cancel(); hl._anim = null;
+    if (jump || morph) hl.style.transition = morph ? 'opacity .25s' : 'none';
+    else if (hl.style.transition) hl.style.transition = '';
+    if (morph) {
+      const f = hlLast, fwd = p.x >= f.x;
+      const mx = fwd ? f.x : p.x, mw = fwd ? (p.x + p.w) - f.x : (f.x + f.w) - p.x;
+      const at = (x, w, sy) => ({ transform: `translate(${x}px, ${p.y}px) scaleY(${sy})`, width: w + 'px' });
+      try {
+        hl._anim = hl.animate([at(f.x, f.w, 1), { ...at(mx, mw, 0.86), offset: 0.45 }, at(p.x, p.w, 1)],
+          { duration: 230, easing: 'cubic-bezier(.4,0,.2,1)' });
+        hl._anim.onfinish = () => { hl._anim = null; };
+      } catch { hl._anim = null; }
+    }
     hl.style.transform = `translate(${p.x}px, ${p.y}px)`;
     hl.style.width = p.w + 'px'; hl.style.height = p.h + 'px';
     if (jump) { hl.offsetWidth; hl.style.transition = ''; }
   });
   hlLast = { x: p0.x, y: p0.y, w: p0.w, h: p0.h, el, n: places.length };
+  markWordInk(el);
 }
 // Anything that reflows the text without resizing #rdText (a late web-font subset such as the
 // Cyrillic drop-cap face, controls hiding, OCR pages arriving, size animations) would leave the
@@ -2155,25 +2182,18 @@ $('#rdMore').onclick = () => {
   const b = S.book;
   const langs = TR_LANGS.filter(l => l !== b.lang).map(l => `<option value="${l}" ${l === biTarget() ? 'selected' : ''}>${esc(langName(l, uiLang()))}</option>`).join('');
   openSheet(`<div class="sh-title">${t('settings')}<button class="x" data-close>${ICON.x}</button></div>
-    <div class="sh-label">${t('appearance')}</div>${themePicker()}
-    <div class="row" data-a="look" style="margin-top:6px"><div class="ic"><span style="font:600 15px/1 var(--display)">Aa</span></div><div class="tx"><b>${t('textSize')} · ${t('typeface')}</b><small>${prefs.fs}px · ${{ literata: 'Literata', source: 'Source Serif', inter: 'Inter' }[prefs.font] || 'Literata'}</small></div><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
     <div class="sh-label">${t('readingVoice')}</div>
-    <div class="row" data-tg="focus"><div class="ic">${ICON.focus}</div><div class="tx"><b>${t('focus')}</b></div><i class="sw ${prefs.focus ? 'on' : ''}"></i></div>
-    <div class="row" data-tg="bi"><div class="ic">${ICON.tr}</div><div class="tx"><b>${t('bilingual')}</b></div><i class="sw ${prefs.bi ? 'on' : ''}"></i></div>
-    <div class="row" style="cursor:default"><div class="tx" style="padding-left:48px"><b style="font-weight:500;font-size:14px;color:var(--ink2)">${t('translateTo')}</b></div><select id="biTo" class="row-select" aria-label="${t('translateTo')}">${langs}</select></div>
+    <div class="row" style="cursor:default"><div class="ic">${ICON.tr}</div><div class="tx"><b>${t('translateTo')}</b></div><select id="biTo" class="row-select" aria-label="${t('translateTo')}">${langs}</select></div>
     <div class="row" data-tg="both"><div class="ic">${ICON.headph}</div><div class="tx"><b>${t('readTr')}</b><small>${t('readTrHint')}</small></div><i class="sw ${prefs.readTr ? 'on' : ''}"></i></div>
-    <div class="row" data-tg="pages"><div class="ic">${ICON.pages}</div><div class="tx"><b>${t('pagesMode')}</b><small>${t('pagesHint')}</small></div><i class="sw ${prefs.pages ? 'on' : ''}"></i></div>
     <div class="row" data-tg="followHl"><div class="ic">${ICON.follow}</div><div class="tx"><b>${t('followHl')}</b><small>${t('followHlHint')}</small></div><i class="sw ${followOn() ? 'on' : ''}"></i></div>
     <div class="row" data-tg="skip"><div class="ic">${ICON.wand}</div><div class="tx"><b>${t('skipFiller')}</b><small>${t('skipFillerHint')}</small></div><i class="sw ${prefs.skip ? 'on' : ''}"></i></div>
     <div class="app-ver" id="appVer">Murmur ${APP_VERSION}</div>
 `, body => {
-    mountThemePicker(body);
-    body.querySelector('[data-a=look]').onclick = () => { closeSheet(); setTimeout(() => openLook('size'), 360); };
     body.querySelectorAll('[data-tg]').forEach(r => r.onclick = () => {
       const k = r.dataset.tg, sw = r.querySelector('.sw');
       if (k === 'focus') { toggleFocus(); sw.classList.toggle('on', prefs.focus); }
       if (k === 'bi') { setBilingual(!prefs.bi); sw.classList.toggle('on', prefs.bi); }
-      if (k === 'both') { prefs.readTr = !prefs.readTr; savePrefs(); sw.classList.toggle('on', prefs.readTr); if (prefs.readTr && !prefs.bi) { setBilingual(true); body.querySelector('[data-tg=bi] .sw').classList.add('on'); } else { const wp = player.playing; setupBilingualVoice().then(() => { if (wp && player.playing) player.play(S.curW); }); } }
+      if (k === 'both') { prefs.readTr = !prefs.readTr; savePrefs(); sw.classList.toggle('on', prefs.readTr); if (prefs.readTr && !prefs.bi) { setBilingual(true); } else { const wp = player.playing; setupBilingualVoice().then(() => { if (wp && player.playing) player.play(S.curW); }); } }
       if (k === 'pages') { setPages(!prefs.pages); sw.classList.toggle('on', prefs.pages); }
       if (k === 'followHl') { prefs.followHl = !followOn(); savePrefs(); sw.classList.toggle('on', followOn()); }
       if (k === 'skip') { prefs.skip = !prefs.skip; savePrefs(); sw.classList.toggle('on', prefs.skip); const w = S.curW; player.stop(); renderSection(w); }
@@ -2185,9 +2205,7 @@ $('#rdMore').onclick = () => {
 /* ------------------------------ appearance ------------------------------ */
 function openLook(focus) {
   const pct = (v, a, b) => ((v - a) / (b - a) * 100) + '%';
-  openSheet(`<div class="sh-title">${t('appearance')}<button class="x" data-close>${ICON.x}</button></div>
-    <div class="sh-label">${t('theme')}</div>
-    <div class="themes">${['paper', 'sepia', 'night'].map(th => `<button class="theme-sw ${prefs.theme === th ? 'on' : ''}" data-t="${th}"><b>Aa</b>${t(th)}</button>`).join('')}</div>
+  openSheet(`<div class="sh-title">${t('textT')}<button class="x" data-close>${ICON.x}</button></div>
     <div class="sh-label">${t('brightness')}</div>
     <div class="range-row"><svg viewBox="0 0 24 24" style="width:18px;opacity:.6"><circle cx="12" cy="12" r="4"/></svg><input type="range" id="rgDim" min="0" max="0.55" step="0.01" value="${0.55 - prefs.dim}" style="--p:${pct(0.55 - prefs.dim, 0, .55)}"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></div>
     <div class="sh-label" id="lblSize">${t('textSize')}</div>
@@ -2201,7 +2219,6 @@ function openLook(focus) {
     <div class="segs" id="sgAl"><button data-v="justify">${t('justify')}</button><button data-v="left">${t('alignLeft')}</button></div>`, body => {
     const mark = () => { body.querySelectorAll('#sgFont button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.font)); body.querySelectorAll('#sgLh button').forEach(b => b.classList.toggle('on', +b.dataset.v === +prefs.lh)); body.querySelectorAll('#sgAl button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs.align)); };
     mark();
-    body.querySelectorAll('.theme-sw').forEach(b => b.onclick = () => { prefs.theme = b.dataset.t; savePrefs(); applyLook(); body.querySelectorAll('.theme-sw').forEach(x => x.classList.toggle('on', x === b)); });
     const fs = body.querySelector('#rgFs');
     const setFs = v => { prefs.fs = Math.max(FS_MIN, Math.min(FS_MAX, Math.round(v))); fs.value = prefs.fs; fs.style.setProperty('--p', pct(prefs.fs, FS_MIN, FS_MAX)); body.querySelector('#fsVal').textContent = prefs.fs; { const near = FS_STEPS.reduce((a, v) => Math.abs(v - prefs.fs) < Math.abs(a - prefs.fs) ? v : a); body.querySelectorAll('#fsSteps button').forEach(b => b.classList.toggle('on', +b.dataset.v === near)); } savePrefs(); applyLook(); keepWordInView(); };
     fs.oninput = () => setFs(+fs.value);
@@ -2211,7 +2228,6 @@ function openLook(focus) {
     body.querySelector('#sgFont').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.font = b.dataset.v; savePrefs(); applyLook(); mark(); };
     body.querySelector('#sgAl').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.align = b.dataset.v; savePrefs(); applyLook(); mark(); };
     body.querySelector('#sgLh').onclick = e => { const b = e.target.closest('button'); if (!b) return; prefs.lh = +b.dataset.v; savePrefs(); applyLook(); mark(); keepWordInView(); };
-    if (focus === 'size') setTimeout(() => body.querySelector('#lblSize').scrollIntoView({ block: 'start', behavior: 'smooth' }), 80);
   });
 }
 $('#dBright').onclick = () => openLook('theme');
@@ -2564,115 +2580,197 @@ function reloadWhenIdle(ver) {
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
 
-/* ------------------------------ orbit: round player, satellites, arc menu on hold ------------------------------ */
-// tap the orb = play / pause; hold it = the arc menu (inner ring: modes, outer ring: speed). Drag to an item and release, or tap one.
-const ORB_SPEEDS = [1, 1.25, 1.5, 2];
+/* ------------------------------ orbit: round player + hold-for-orbits menu (1.6.0) ------------------------------ */
+// The reading view shows only the orb. Tap = play / pause. Hold = the orbits: inner ring (modes), outer ring (speed,
+// theme, text, more). Options apply in place and the menu stays; tap the text (or the orb) to go back to reading.
+// Speed opens an arc slider on the same orbit.
+const SPD_MIN = 0.5, SPD_MAX = 3, SPD_MAG = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5];
+const THEMES = ['paper', 'sepia', 'night'];
 function orbitSync() {
   const rd = $('#reader'); if (!rd || !S.model || !S.book) return;
-  const lm = S.mode === 'listen';
-  rd.classList.toggle('lm', lm);
+  rd.classList.toggle('lm', S.mode === 'listen');
   const bp = bookProg();
   const pr = $('#oRingPr'); if (pr) pr.style.strokeDasharray = `${Math.max(0.4, bp.f * 100).toFixed(2)} 100`;
-  if (lm) {
-    const n = S.model.sents.length, s = Math.max(0, S.curS);
-    $('#oInfoT').textContent = prefs.pages ? `${s + 1} / ${n}` : t('sentenceN').replace('{a}', s + 1).replace('{b}', n);
-    const vn = ($('#pVoice .v')?.textContent || '').trim();
-    const tm = S.timer ? ' · ' + ($('#dTimerTxt')?.textContent || '') : '';
-    $('#oInfoS').textContent = [vn && vn !== '—' ? vn.split(/[ ,(]/)[0] : '', t('leftT') + ' ' + fmtLeft(bp.left).replace('~', '')].filter(Boolean).join(' · ') + tm;
-  }
   $('#pPlay').setAttribute('aria-label', player.playing ? 'Pause' : 'Play');
+  if (arcOpen()) arcStatus();
 }
-function arcItemsHTML() {
-  const vo = ($('#pVoice .v')?.textContent || '—').trim().split(/[ ,(]/)[0];
-  const tmr = S.timer ? ($('#dTimerTxt')?.textContent || '') : t('off');
+const voiceShort = () => { const v = ($('#pVoice .v')?.textContent || '').trim(); return v && v !== '—' ? v.split(/[ ,(]/)[0] : '—'; };
+function arcStatus() {
+  const el = $('#arcSt'); if (!el || !S.model) return;
+  if (S.mode !== 'listen') { el.textContent = t('orbitHint'); return; }
+  const n = S.model.sents.length, s = Math.max(0, S.curS), bp = bookProg();
+  const tm = S.timer ? ' · ☾ ' + ($('#dTimerTxt')?.textContent || '') : '';
+  el.textContent = `${t('sentenceN').replace('{a}', s + 1).replace('{b}', n)} · ${voiceShort()} · ${t('leftT')} ${fmtLeft(bp.left).replace('~', '')}${tm}`;
+}
+function arcGeo() {
+  const rd = $('#reader'), rr = rd.getBoundingClientRect(), orb = $('#pPlay').getBoundingClientRect();
+  const W = rr.width, cx = orb.left + orb.width / 2 - rr.left, cy = orb.top + orb.height / 2 - rr.top;
+  const R1 = Math.min(160, Math.round(W * 0.41)), R2 = R1 + 108;
+  return { W, H: rr.height, cx, cy, R1, R2, RS: Math.round((R1 + R2) / 2), rr };
+}
+const polar = (g, r, deg) => { const a = deg * Math.PI / 180; return [g.cx + r * Math.cos(a), g.cy + r * Math.sin(a)]; };
+const IC = {
+  voice: '<svg viewBox="0 0 24 24"><path d="M12 3a3.5 3.5 0 0 1 3.5 3.5v5a3.5 3.5 0 0 1-7 0v-5A3.5 3.5 0 0 1 12 3zM5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/></svg>',
+  timer: '<svg viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></svg>',
+  focus: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>',
+  pages: '<svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>',
+  speed: '<svg viewBox="0 0 24 24"><path d="M4.5 16.5a8 8 0 1 1 15 0M12 13l4-5"/></svg>',
+  sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>',
+  more: '<svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>',
+  prev: '<svg viewBox="0 0 24 24"><path d="M11 7l-5 5 5 5M18 7l-5 5 5 5"/></svg>',
+  next: '<svg viewBox="0 0 24 24"><path d="M13 7l5 5-5 5M6 7l5 5-5 5"/></svg>',
+  stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" style="fill:currentColor;stroke:none"/></svg>',
+  back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>'
+};
+function arcInner() {
   const on = t('onShort'), off = t('off');
   return [
-    { k: 'voice', n: t('voice'), v: vo, ic: '<svg viewBox="0 0 24 24"><path d="M12 3a3.5 3.5 0 0 1 3.5 3.5v5a3.5 3.5 0 0 1-7 0v-5A3.5 3.5 0 0 1 12 3zM5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/></svg>' },
-    { k: 'timer', n: t('sleepTimer'), v: tmr, on: !!S.timer, ic: '<svg viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/></svg>' },
+    { k: 'voice', n: t('voice'), v: voiceShort(), ic: IC.voice },
+    { k: 'timer', n: t('sleepTimer'), v: S.timer ? ($('#dTimerTxt')?.textContent || '') : off, on: !!S.timer, ic: IC.timer },
     { k: 'tr', n: t('translationT'), v: prefs.bi ? on : off, on: !!prefs.bi, ic: ICON.tr },
-    { k: 'focus', n: t('focusT'), v: prefs.focus ? on : off, on: !!prefs.focus, ic: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>' },
-    { k: 'pages', n: t('pagesMode'), v: prefs.pages ? t('pagesSide') : t('pagesScroll'), on: !!prefs.pages, ic: '<svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>' }
+    { k: 'focus', n: t('focusT'), v: prefs.focus ? on : off, on: !!prefs.focus, ic: IC.focus },
+    { k: 'pages', n: t('pagesMode'), v: prefs.pages ? t('pagesSide') : t('pagesScroll'), on: !!prefs.pages, ic: IC.pages }
   ];
 }
-function openArc() {
-  const rd = $('#reader'), m = $('#arcm'), box = $('#arcItems'); if (!rd || !m) return;
-  hidePop(); $('#coach')?.classList.remove('show'); prefs.hints = prefs.hints || {}; if (!prefs.hints.orbit) { prefs.hints.orbit = 1; savePrefs(); }
-  const rr = rd.getBoundingClientRect(), orb = $('#pPlay').getBoundingClientRect();
-  const W = rr.width, cx = orb.left + orb.width / 2 - rr.left, cy = orb.top + orb.height / 2 - rr.top;
-  const R = Math.min(165, Math.round(W * 0.42)), R2 = R + 112;
-  let h = '';
-  arcItemsHTML().forEach((it, i) => {
-    const a = (180 + i * 22.5) * Math.PI / 180, x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
-    const lx = cx + (R + 54) * Math.cos(a), ly = cy + (R + 54) * Math.sin(a);
-    h += `<button class="rb ${it.on ? 'on' : ''}" data-k="${it.k}" style="left:${(x - 27).toFixed(0)}px;top:${(y - 27).toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}</button>`;
-    h += `<div class="rl" style="left:${Math.max(4, lx - 44).toFixed(0)}px;top:${(ly - 15).toFixed(0)}px"><b>${esc(it.n)}</b>${esc(it.v)}</div>`;
-  });
-  const cur = ORB_SPEEDS.reduce((a, v) => Math.abs(v - prefs.rate) < Math.abs(a - prefs.rate) ? v : a);
-  let lx0 = 0, ly0 = 0;
-  ORB_SPEEDS.forEach((v, i) => {
-    const a = (191.25 + i * 22.5) * Math.PI / 180, x = Math.max(8, cx + R2 * Math.cos(a) - 25), y = cy + R2 * Math.sin(a) - 16;
-    if (i === ORB_SPEEDS.length - 1) { lx0 = x; ly0 = y; }
-    h += `<button class="sp ${v === cur && Math.abs(v - prefs.rate) < 0.01 ? 'on' : ''}" data-rate="${v}" style="left:${x.toFixed(0)}px;top:${y.toFixed(0)}px">${fmtRate(v)}</button>`;
-  });
-  h += `<div class="splab" style="left:${Math.max(4, lx0 - 98).toFixed(0)}px;top:${(ly0 + 11).toFixed(0)}px">${t('speed')}</div>`;
+function arcOuter() {
+  return [
+    { k: 'speed', v: fmtRate(prefs.rate), ic: IC.speed, n: t('speed') },
+    { k: 'theme', v: t(prefs.theme), ic: '', n: t('theme') },
+    { k: 'text', v: `Aa ${prefs.fs}`, ic: '', n: t('textSize') },
+    { k: 'more', v: t('moreT'), ic: IC.more, n: t('moreT') }
+  ];
+}
+function renderArc() {
+  const m = $('#arcm'), box = $('#arcItems'); if (!m || !box) return;
+  const g = arcGeo(), sp = m.classList.contains('spd'), lm = S.mode === 'listen';
+  let h = '', head = '';
+  if (sp) {
+    head = `<div class="arc-row"><button class="ach" data-k="orbits">${IC.back}<span>${t('orbitsT')}</span></button><button class="ach" data-k="rate1">1.0×</button></div>
+      <b class="ttl">${t('speed')}</b><div class="spv" id="spv">${fmtRate(prefs.rate)}</div><div class="st">${t('speedHint')}</div>`;
+    const RS = g.RS, [x0, y0] = polar(g, RS, 180), [x1, y1] = polar(g, RS, 270);
+    const ticks = [0.5, 1, 1.5, 2, 2.5, 3].map(v => { const a = 180 + (v - SPD_MIN) / (SPD_MAX - SPD_MIN) * 90, [tx, ty] = polar(g, RS, a), [lx, ly] = polar(g, RS + 34, a);
+      return `<circle class="tk" cx="${tx.toFixed(1)}" cy="${ty.toFixed(1)}" r="2.2"/><text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}">${v}</text>`; }).join('');
+    h = `<svg class="arc-sl" style="width:${g.W}px;height:${g.H}px" viewBox="0 0 ${g.W} ${g.H}"><path class="tr" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${RS} ${RS} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}"/>
+      <path class="fl" id="spFill" d=""/>${ticks}<circle class="kn" id="spKnob" r="17" cx="0" cy="0"/></svg>`;
+  } else {
+    head = `<b class="ttl">${t('orbitTitle')}</b><div class="st" id="arcSt"></div>${lm ? `<div class="arc-row"><button class="ach" data-k="prev" aria-label="${t('prevT')}">${IC.prev}</button><button class="ach" data-k="stop">${IC.stop}<span>${t('read')}</span></button><button class="ach" data-k="next" aria-label="${t('nextT')}">${IC.next}</button></div>` : ''}`;
+    arcInner().forEach((it, i) => {
+      const [x, y] = polar(g, g.R1, 180 + i * 22.5), [lx, ly] = polar(g, g.R1 + 58, 180 + i * 22.5);
+      h += `<button class="rb ${it.on ? 'on' : ''}" data-k="${it.k}" style="left:${(x - 26).toFixed(0)}px;top:${(y - 26).toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}</button>`;
+      h += `<div class="rl" style="left:${Math.max(4, Math.min(g.W - 92, lx - 44)).toFixed(0)}px;top:${(ly - 17).toFixed(0)}px"><b>${esc(it.n)}</b><span>${esc(it.v)}</span></div>`;
+    });
+    arcOuter().forEach((it, i) => {
+      const [x, y] = polar(g, g.R2, [190, 210, 236, 260][i]);
+      h += `<button class="ch ${it.k === 'speed' ? 'acc' : ''}" data-k="${it.k}" style="left:${Math.max(56, Math.min(g.W - 56, x)).toFixed(0)}px;top:${(y - 19).toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}<span>${esc(it.v)}</span></button>`;
+    });
+  }
+  $('#arcTtl').innerHTML = head;
   box.innerHTML = h;
   const t1 = m.querySelector('.a1'), t2 = m.querySelector('.a2');
-  Object.assign(t1.style, { left: cx - R + 'px', top: cy - R + 'px', width: 2 * R + 'px', height: 2 * R + 'px' });
-  Object.assign(t2.style, { left: cx - R2 + 'px', top: cy - R2 + 'px', width: 2 * R2 + 'px', height: 2 * R2 + 'px' });
-  applyI18n();
+  Object.assign(t1.style, { left: g.cx - g.R1 + 'px', top: g.cy - g.R1 + 'px', width: 2 * g.R1 + 'px', height: 2 * g.R1 + 'px' });
+  Object.assign(t2.style, { left: g.cx - g.R2 + 'px', top: g.cy - g.R2 + 'px', width: 2 * g.R2 + 'px', height: 2 * g.R2 + 'px' });
+  if (sp) spPaint(prefs.rate); else arcStatus();
+}
+function openArc(speed = false) {
+  const rd = $('#reader'), m = $('#arcm'); if (!rd || !m) return;
+  hidePop(); $('#coach')?.classList.remove('show');
+  prefs.hints = prefs.hints || {}; if (!prefs.hints.orbit || !prefs.hints.orbit2) { prefs.hints.orbit = prefs.hints.orbit2 = 1; savePrefs(); }
+  m.classList.toggle('spd', !!speed);
+  renderArc();
   m.classList.add('show'); m.setAttribute('aria-hidden', 'false'); rd.classList.add('arc-on');
   navigator.vibrate?.(10);
 }
-function closeArc() { const m = $('#arcm'); if (!m) return; m.classList.remove('show'); m.setAttribute('aria-hidden', 'true'); $('#reader').classList.remove('arc-on'); $$('#arcItems .hov').forEach(x => x.classList.remove('hov')); }
-const arcOpen = () => $('#arcm')?.classList.contains('show');
+function closeArc() { const m = $('#arcm'); if (!m) return; m.classList.remove('show', 'spd'); m.setAttribute('aria-hidden', 'true'); $('#reader').classList.remove('arc-on'); $$('#arcm .hov').forEach(x => x.classList.remove('hov')); }
+const arcOpen = () => !!$('#arcm')?.classList.contains('show');
+/* speed slider on the orbit */
+const spAngle = v => 180 + (v - SPD_MIN) / (SPD_MAX - SPD_MIN) * 90;
+function spValue(deg) {
+  let v = SPD_MIN + (Math.max(180, Math.min(270, deg)) - 180) / 90 * (SPD_MAX - SPD_MIN);
+  v = Math.round(v * 20) / 20;
+  const mg = SPD_MAG.find(x => Math.abs(x - v) <= 0.04); if (mg) v = mg;
+  return Math.max(SPD_MIN, Math.min(SPD_MAX, +v.toFixed(2)));
+}
+function spPaint(v) {
+  const g = arcGeo(), a = spAngle(v), [x0, y0] = polar(g, g.RS, 180), [kx, ky] = polar(g, g.RS, a);
+  const f = $('#spFill'), k = $('#spKnob'); if (!f || !k) return;
+  f.setAttribute('d', a > 180.2 ? `M${x0.toFixed(1)} ${y0.toFixed(1)} A${g.RS} ${g.RS} 0 0 1 ${kx.toFixed(1)} ${ky.toFixed(1)}` : '');
+  k.setAttribute('cx', kx.toFixed(1)); k.setAttribute('cy', ky.toFixed(1));
+  const sv = $('#spv'); if (sv) sv.textContent = fmtRate(v);
+}
+function setRateNow(v) {
+  prefs.rate = v; savePrefs(); player.setRate(v); $('#pSpeed').textContent = fmtRate(v); updateProgress();
+}
 function arcAct(el) {
   if (!el) return;
-  const k = el.dataset.k, r = el.dataset.rate;
-  closeArc();
-  if (r) { const v = +r; prefs.rate = v; savePrefs(); player.setRate(v); $('#pSpeed').textContent = fmtRate(v); updateProgress(); toast(`${t('speed')}: ${fmtRate(v)}`, 1400); return; }
+  const k = el.dataset.k;
   if (k === 'voice') return openVoices();
   if (k === 'timer') return openTimer();
-  if (k === 'tr') { setBilingual(!prefs.bi); toast(`${t('translationT')}: ${prefs.bi ? t('onShort') : t('off')}`, 1400); return; }
-  if (k === 'focus') { toggleFocus(); return; }
-  if (k === 'pages') { setPages(!prefs.pages); toast(`${t('pagesMode')}: ${prefs.pages ? t('pagesSide') : t('pagesScroll')}`, 1400); }
+  if (k === 'text') return openLook('size');
+  if (k === 'more') return $('#rdMore').onclick();
+  if (k === 'speed') { $('#arcm').classList.add('spd'); renderArc(); return; }
+  if (k === 'orbits') { $('#arcm').classList.remove('spd'); renderArc(); return; }
+  if (k === 'rate1') { setRateNow(1); spPaint(1); return; }
+  if (k === 'prev' || k === 'next') { S.lastUserScroll = 0; player.skip(k === 'prev' ? -1 : 1); return; }
+  if (k === 'stop') { setMode('read'); renderArc(); return; }
+  if (k === 'tr') setBilingual(!prefs.bi);
+  if (k === 'focus') toggleFocus();
+  if (k === 'pages') setPages(!prefs.pages);
+  if (k === 'theme') { prefs.theme = THEMES[(THEMES.indexOf(prefs.theme) + 1) % 3]; savePrefs(); applyLook(); }
+  requestAnimationFrame(() => arcOpen() && renderArc());
 }
-const arcAt = (x, y) => document.elementFromPoint(x, y)?.closest('#arcItems .rb, #arcItems .sp');
+const arcAt = (x, y) => document.elementFromPoint(x, y)?.closest('#arcm [data-k]');
 (() => {
-  const orb = $('#pPlay'); let tmr = 0, down = null, long = false;
-  const hov = el => { $$('#arcItems .hov').forEach(x => x !== el && x.classList.remove('hov')); el?.classList.add('hov'); };
+  const orb = $('#pPlay'), m = $('#arcm'); let tmr = 0, down = null, long = false, drag = null;
+  const hov = el => { $$('#arcm .hov').forEach(x => x !== el && x.classList.remove('hov')); el?.classList.add('hov'); };
   orb.addEventListener('contextmenu', e => e.preventDefault());
   orb.addEventListener('pointerdown', e => {
     if (e.button > 0) return;
     down = { x: e.clientX, y: e.clientY }; long = false; clearTimeout(tmr); S.orbLong = 0; // a new press: an old hold no longer swallows clicks
-    tmr = setTimeout(() => { long = true; S.orbLong = Date.now(); openArc(); }, 420);
+    tmr = setTimeout(() => { long = true; S.orbLong = Date.now(); openArc(false); }, 420);
   });
+  // window-level: a finger is captured by the orb, a mouse / pen may leave it while dragging to an item
   window.addEventListener('pointermove', e => {
+    if (drag) { spDrag(e); return; }
     if (!down) return;
     if (long) { hov(arcAt(e.clientX, e.clientY)); return; }
     if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 14) { clearTimeout(tmr); down = null; }
   });
   const up = e => {
+    if (drag) { spDrag(e); const v = drag.v; drag = null; S.arcTap = Date.now(); if (v != null && Math.abs(v - prefs.rate) > 0.001) setRateNow(v); return; }
     clearTimeout(tmr);
-    if (down && long && e.type === 'pointerup') { const el = arcAt(e.clientX, e.clientY); if (el) arcAct(el); }
+    if (down && long && e.type === 'pointerup') { const el = arcAt(e.clientX, e.clientY); hov(null); if (el) { S.arcTap = Date.now(); arcAct(el); } }
     down = null;
   };
-  // window-level: a finger is captured by the orb, a mouse / pen may leave it while dragging to an item
   window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
-  // the click that ends a hold is not a play / pause tap
-  window.addEventListener('click', e => { if (S.orbLong && Date.now() - S.orbLong < 2500 && e.target.closest && e.target.closest('#pPlay')) { e.stopImmediatePropagation(); e.preventDefault(); S.orbLong = 0; } }, true);
-  $('#arcm').addEventListener('click', e => {
-    const el = e.target.closest('.rb, .sp');
-    if (el) { arcAct(el); return; }
-    if (Date.now() - (S.orbLong || 0) < 500) return;
-    closeArc();
+  // slider: press on (or near) the speed orbit and drag the knob along it
+  const spDrag = e => {
+    const g = arcGeo(), x = e.clientX - g.rr.left, y = e.clientY - g.rr.top;
+    let deg = Math.atan2(y - g.cy, x - g.cx) * 180 / Math.PI; if (deg < 0) deg += 360; if (deg < 90) deg = 360; // below the orb's left: clamp to the slow end
+    const v = spValue(deg); drag.v = v; spPaint(v);
+  };
+  m.addEventListener('pointerdown', e => {
+    if (!m.classList.contains('spd') || e.target.closest('[data-k]')) return;
+    const g = arcGeo(), x = e.clientX - g.rr.left, y = e.clientY - g.rr.top, d = Math.hypot(x - g.cx, y - g.cy);
+    if (d < g.RS - 52 || d > g.RS + 52 || x > g.cx + 30 || y > g.cy + 30) return;
+    drag = { v: null }; e.preventDefault(); try { m.setPointerCapture(e.pointerId); } catch {}
+    spDrag(e);
   });
-  orb.addEventListener('click', () => { if (!player.playing) setTimeout(() => { if (S.screen === 'reader' && !uiBusy() && !arcOpen() && !player.playing) hint('orbit', t('hintOrbit')); }, 2500); });
+  // the click that ends a hold is not a play / pause tap; with the orbits open the orb takes you back to reading
+  window.addEventListener('click', e => {
+    const onOrb = e.target.closest && e.target.closest('#pPlay'); if (!onOrb) return;
+    if (S.orbLong && Date.now() - S.orbLong < 2500) { e.stopImmediatePropagation(); e.preventDefault(); S.orbLong = 0; return; }
+    if (arcOpen()) { closeArc(); if (player.playing) { e.stopImmediatePropagation(); e.preventDefault(); } }
+  }, true);
+  m.addEventListener('click', e => {
+    const el = e.target.closest('[data-k]');
+    if (el) { if (Date.now() - (S.arcTap || 0) > 350) arcAct(el); return; }
+    if (Date.now() - (S.orbLong || 0) < 500 || Date.now() - (S.arcTap || 0) < 350) return;
+    closeArc(); // a tap on the text = back to reading
+  });
 })();
-$('#oStop').onclick = () => { setMode('read'); };
-$('#oAa').onclick = () => openLook('size');
-$('#oTheme').onclick = () => openLook('theme');
 window.addEventListener('popstate', () => closeArc());
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && arcOpen()) closeArc(); });
+window.addEventListener('resize', () => { if (arcOpen()) renderArc(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && arcOpen() && !uiBusy()) closeArc(); });
 
-window.murmur = { orbitSync, openArc, closeArc, openAppSettings, S, prefs, player, APP_VERSION, openStudio, pagesLive, applyListenMarks, clearListenMarks, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
+window.murmur = { orbitSync, openArc, closeArc, renderArc, arcAct, spValue, openAppSettings, S, prefs, player, APP_VERSION, openStudio, pagesLive, applyListenMarks, clearListenMarks, openBook, setPages, openNav, jumpTo, appendNext, bookToc, setWindow, ensureWindow, chapterName, pageInfo, bookProg, enterTrOnly, exitTrOnly, applyLook, gotoSection, setBare, setMode, startPlayback, setCurrent, toggleFocus, setBilingual, openLook, openTimer, setTimer, openVoices, openSpeed, saveQuote, renderQuotes, renderStats, show, openAdd, checkRelay, probeRelay, positionHL, showPop, hidePop, hideHint, updateMediaSession, mediaArtwork, layoutPages, glyphBox, fontInk, shareSelection, buildModel, ttsStats, CATALOG, neural, device, engine, syncVoice, positionHandles, pageTo, turnPage, scrollerXY, focusWord, renderFocus, syncPlayerHeight, applySel, caretFromPoint, wordAtPoint, syncViewport, rdTopPx, rangeText, fragBox, selectionBox, placeMenu, hyphenW, extendHyphenRect, paintSel, selLineBands, followOn, readingCenterY, lineH, autoScroll, followEl, pageOfEl, wordOnLine };
 boot();

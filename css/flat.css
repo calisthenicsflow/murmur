@@ -6,7 +6,7 @@ body[data-theme=night]{ --hair:rgba(201,164,106,.26); --chip:#0D0C0B; --chipB:rg
 body{font-family:var(--ui)}
 /* lining figures for Cormorant numbers in the UI. Never on the reading text: a non-default font-variant / feature empties
    getComputedStyle().font, which the highlight box measures with (fontInk). */
-#sheet,#stats,#library,#quotes,.orbit,.arcm{font-feature-settings:"lnum" 1}
+#sheet,#stats,#library,#quotes,.orbit,.arcm{font-feature-settings:"lnum" 1;font-variant-numeric:lining-nums}
 html,body{background:var(--bg)}
 
 /* ---------- shared bits ---------- */
@@ -84,20 +84,17 @@ body[data-theme=sepia] .fc1{background:#F6EEDF}
 .hl{background:var(--accent);box-shadow:var(--glow)}
 .f-hl,.f-s.cur .w.cw::before{box-shadow:var(--glow)}
 .rd-text .w.cw,.rd-text .tw.cw,.f-s.cur .w.cw{color:var(--accent-ink)}
-.recenter{bottom:calc(var(--safe-b) + 178px);color:var(--accent-ink);box-shadow:var(--glow)}
+.recenter{bottom:calc(var(--safe-b) + 40px);color:var(--accent-ink);box-shadow:var(--glow)}
 .ocr-pill{background:var(--card);border:1px solid var(--hair)}
 .thin-prog i{box-shadow:0 0 6px var(--accent)}
 .rd-next button{border:1px solid var(--hair);background:var(--chip)}
 .rd-next .end{font-family:var(--display)}
 
-/* the orbit band: the only bottom chrome (no bar) */
-#reader .dock.orbit{display:block;position:absolute;left:0;right:0;bottom:0;height:calc(var(--safe-b) + 164px);padding:0;gap:0;z-index:30;pointer-events:none;
+/* the orbit band (1.6.0): only the orb + its progress ring. No floor, no satellites — the text stays visible. */
+#reader .dock.orbit{display:block;position:absolute;left:auto;right:0;bottom:0;width:132px;height:calc(var(--safe-b) + 120px);padding:0;gap:0;z-index:30;pointer-events:none;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .orbit>*{pointer-events:auto}
-/* a solid floor under the band: the text ends above it (flat, no fade) */
-#reader .dock.orbit::before{content:"";position:absolute;inset:0;background:var(--bg);pointer-events:auto;transition:opacity .35s var(--ease)}
-#reader.pages .dock.orbit{height:calc(var(--safe-b) + 116px)}
-.orbit .legacy{display:none!important}
+.orbit .legacy,.orbit .sat,.orbit .o-info,.orbit .o-trans{display:none!important}
 #pPlay.orb{position:absolute;right:26px;bottom:calc(var(--safe-b) + 22px);width:76px;height:76px;touch-action:none;-webkit-touch-callout:none;z-index:3;transition:transform .25s var(--spring),box-shadow .3s}
 #pPlay.orb svg{width:28px;height:28px;fill:currentColor;stroke:none}
 #pPlay.orb:active{transform:scale(.93)}
@@ -109,53 +106,57 @@ body[data-theme=sepia] .fc1{background:#F6EEDF}
 .o-ring circle{fill:none;stroke-width:3}.o-ring .trk{stroke:var(--line)}
 .o-ring .pr{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:0 100;transition:stroke-dasharray .5s var(--ease)}
 body[data-theme=night] .o-ring .pr{filter:drop-shadow(0 0 3px var(--accent))}
-.orbit .sat{position:absolute;width:46px;height:46px;border-radius:50%;background:var(--chip);border:1px solid var(--chipB);box-shadow:var(--sat-sh);display:grid;place-items:center;font:600 13px/1 var(--ui);color:var(--ink);padding:0;min-width:0;transition:transform .2s var(--spring),opacity .3s}
-.orbit .sat:active{transform:scale(.9)}
-.orbit .sat svg{width:18px;height:18px;stroke-width:1.6}
-#pSpeed{right:130px;bottom:calc(var(--safe-b) + 30px);font-variant-numeric:tabular-nums;font-size:12.5px}
-#oAa{right:116px;bottom:calc(var(--safe-b) + 90px);font-family:var(--display);font-size:18px;font-weight:600}
-#oTheme{right:62px;bottom:calc(var(--safe-b) + 116px)}
-.o-info{position:absolute;left:24px;bottom:calc(var(--safe-b) + 26px);max-width:calc(100% - 200px);display:none;flex-direction:column;gap:3px;pointer-events:none!important}
-.o-info b{font:600 15px/1.2 var(--ui);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.o-info span{font:400 12.5px/1.35 var(--ui);color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.o-trans{position:absolute;left:20px;bottom:calc(var(--safe-b) + 76px);display:none;gap:8px}
-.o-tb{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--chip);border:1px solid var(--chipB);color:var(--ink);box-shadow:var(--sat-sh);transition:transform .2s var(--spring)}
-.o-tb:active{transform:scale(.88)}
-.o-tb svg{width:17px;height:17px;stroke-width:1.8}
-#oStop svg{fill:currentColor;stroke:none;width:13px;height:13px}
-#reader.lm .o-info{display:flex}#reader.lm .o-trans{display:flex}
-/* pages: the column ends above the band; satellites would cover text, so they live in the arc + Aa sheet */
-#reader.pages .orbit .sat{display:none}
-#reader.pages .o-info{max-width:calc(100% - 140px)}
-#reader.pages.lm .o-trans{left:auto;right:120px;bottom:calc(var(--safe-b) + 41px)}
-#reader.pages .o-info{bottom:calc(var(--safe-b) + 24px)}
-#reader.pages.lm .o-info{max-width:calc(100% - 280px)}
-@media (max-width:360px){ #reader.pages.lm .o-info{display:none} }
 #reader.bare .dock.orbit{transform:translateY(calc(100% + 150px));opacity:0;pointer-events:none}
 #reader.bare .dock.orbit>*{pointer-events:none}
 .player{display:none!important}
 
-/* arc menu */
+/* the orbits (hold the orb). A light dim only — the page stays readable behind it. */
+:root{--veil:rgba(244,239,230,.42)} body[data-theme=sepia]{--veil:rgba(235,221,194,.42)} body[data-theme=night]{--veil:rgba(7,7,7,.42)}
 .arcm{position:absolute;inset:0;z-index:44;background:var(--veil);opacity:0;visibility:hidden;transition:opacity .25s var(--ease),visibility 0s .25s;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;overflow:hidden}
 .arcm.show{opacity:1;visibility:visible;transition:opacity .25s var(--ease),visibility 0s}
 #reader.arc-on .dock.orbit{z-index:46}
-#reader.arc-on .dock.orbit::before{opacity:0;pointer-events:none}
-#reader.arc-on .orbit .sat,#reader.arc-on .o-info,#reader.arc-on .o-trans,#reader.arc-on .o-ring{opacity:0;pointer-events:none}
-.arc-ttl{position:absolute;top:calc(var(--safe-t) + 64px);left:24px;right:24px}
-.arc-ttl b{display:block;font-family:var(--display);font-style:italic;font-weight:500;font-size:36px;line-height:1.1;letter-spacing:-.01em;color:var(--ink)}
-.arc-ttl span{display:block;font:400 14px/1.45 var(--ui);color:var(--muted);margin-top:10px;max-width:330px}
+.arc-ttl{position:absolute;top:calc(var(--safe-t) + 66px);left:20px;right:20px;pointer-events:none}
+.arc-ttl>*{pointer-events:auto}
+.arc-ttl .ttl{display:inline-block;font-family:var(--display);font-style:italic;font-weight:500;font-size:32px;line-height:1.1;letter-spacing:-.01em;color:var(--ink);background:var(--bg);padding:2px 10px 4px;margin-left:-10px;border-radius:12px}
+.arc-ttl .st{display:table;font:500 13px/1.4 var(--ui);color:var(--ink2);margin-top:6px;max-width:330px;background:var(--bg);padding:5px 10px;margin-left:-10px;border-radius:10px}
+.arc-row{display:flex;gap:8px;margin-top:10px}
+.arc-row:first-child{margin:0 0 12px}
+.ach{height:38px;min-width:38px;padding:0 13px;border-radius:19px;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--chip);border:1px solid var(--chipB);color:var(--ink);font:600 13px/1 var(--ui);box-shadow:var(--sat-sh)}
+.ach svg{width:16px;height:16px;stroke-width:1.8}
+.ach:active{transform:scale(.94)}
 .arc-trk{position:absolute;border-radius:50%;pointer-events:none}
 .arc-trk.a1{border:1px solid var(--trk2)}.arc-trk.a2{border:1px dashed var(--trk)}
-.arcm .rb{position:absolute;width:54px;height:54px;border-radius:50%;background:var(--chip);border:1px solid var(--chipB);box-shadow:var(--sat-sh);display:grid;place-items:center;color:var(--ink);transform:scale(.6);opacity:0;transition:transform .3s var(--spring),opacity .2s,background .2s,border-color .2s}
+.arcm.spd .arc-trk{opacity:0}
+.arcm *{font-feature-settings:"lnum" 1;font-variant-numeric:lining-nums}
+.arcm .rb{position:absolute;width:52px;height:52px;border-radius:50%;background:var(--chip);border:1px solid var(--chipB);box-shadow:var(--sat-sh);display:grid;place-items:center;color:var(--ink);transform:scale(.6);opacity:0;transition:transform .3s var(--spring),opacity .2s,background .2s,border-color .2s}
 .arcm .rb svg{width:21px;height:21px;stroke-width:1.6}
-.arcm.show .rb,.arcm.show .sp{transform:none;opacity:1}
+.arcm.show .rb,.arcm.show .ch{transform:none;opacity:1}
 .arcm .rb.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);box-shadow:var(--glow)}
-.arcm .rb.hov,.arcm .sp.hov{transform:scale(1.14);border-color:var(--accent)}
-.arcm .rl{position:absolute;width:88px;text-align:center;font:400 11px/1.25 var(--ui);color:var(--muted);pointer-events:none;white-space:nowrap}
-.arcm .rl b{display:block;font:600 12.5px/1.2 var(--ui);color:var(--ink);overflow:hidden;text-overflow:ellipsis}
-.arcm .sp{position:absolute;width:50px;height:32px;border-radius:16px;font:600 13px/1 var(--ui);color:var(--muted);background:var(--chip);border:1px solid var(--chipB);font-variant-numeric:tabular-nums;transform:scale(.6);opacity:0;transition:transform .3s var(--spring),opacity .2s}
-.arcm .sp.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);box-shadow:var(--glow)}
-.arcm .splab{position:absolute;width:90px;text-align:right;font:600 11px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--accent-deep);pointer-events:none}
+.arcm .rb.hov,.arcm .ch.hov,.ach.hov{transform:scale(1.12);border-color:var(--accent)}
+.arcm .rl{position:absolute;width:88px;display:flex;flex-direction:column;align-items:center;pointer-events:none;white-space:nowrap;font:500 11px/1.25 var(--ui);color:var(--ink2)}
+.arcm .rl b{display:block;font:700 12px/1.2 var(--ui);color:var(--ink);max-width:88px;overflow:hidden;text-overflow:ellipsis}
+.arcm .rl b,.arcm .rl span{background:var(--bg);padding:1px 6px;border-radius:6px}
+.arcm .rl span{margin-top:1px;max-width:88px;overflow:hidden;text-overflow:ellipsis}
+.arcm .ch{position:absolute;min-width:76px;max-width:108px;translate:-50% 0;height:38px;border-radius:19px;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 12px;background:var(--chip);border:1px solid var(--chipB);color:var(--ink);box-shadow:var(--sat-sh);font:600 13px/1 var(--ui);white-space:nowrap;transform:scale(.6);opacity:0;transition:transform .3s var(--spring),opacity .2s}
+.arcm .ch svg{width:15px;height:15px;stroke-width:1.8;flex:none}
+.arcm .ch span{overflow:hidden;text-overflow:ellipsis}
+.arcm .ch[data-k=text] span{font-family:var(--display);font-size:15px;font-weight:600;font-variant-numeric:lining-nums}
+.arcm .ch.acc{border-color:var(--accent);color:var(--accent-deep)}
+/* speed slider: the same orbit, a knob that runs along it */
+.arc-ttl .spv{font:600 58px/1 var(--display);font-variant-numeric:lining-nums;font-feature-settings:"lnum" 1;letter-spacing:-.02em;color:var(--ink);margin-top:4px;display:inline-block;background:var(--bg);padding:0 10px;margin-left:-10px;border-radius:12px}
+.arc-sl{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.arc-sl .tr{fill:none;stroke:var(--trk);stroke-width:12;stroke-linecap:round}
+body[data-theme=night] .arc-sl .tr{stroke:rgba(242,236,226,.16)}
+.arc-sl .fl{fill:none;stroke:var(--accent);stroke-width:12;stroke-linecap:round}
+body[data-theme=night] .arc-sl .fl,body[data-theme=night] .arc-sl .kn{filter:drop-shadow(0 0 5px rgba(255,90,31,.6))}
+.arc-sl .tk{fill:var(--ink2);opacity:.55}
+.arc-sl text{font:700 13px var(--ui);font-variant-numeric:lining-nums;fill:var(--ink2);text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:6px;stroke-linejoin:round}
+.arc-sl .kn{fill:var(--accent);stroke:var(--bg);stroke-width:4}
+/* pages mode: the pill is painted under the text (own stacking context), and the spoken word gets the
+   on-accent ink through the Custom Highlight API — nothing is toggled inside the columns. */
+#reader.pages .rd-scroll{z-index:0}
+#reader.pages .hls,#reader.pages .sels{z-index:-1}
+::highlight(mm-cw){color:#140A05}
 
 /* ---------- sheets & dialogs ---------- */
 #scrim{background:rgba(7,7,7,.4)}

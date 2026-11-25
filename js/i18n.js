@@ -45,6 +45,12 @@ Object.assign(D.ru, { continueQ: 'Продолжим?', libraryT: 'Библио�
   nowPlaying: 'Сейчас звучит', fromPlace: 'С места, где остановились', leftT: 'осталось', readingVoice: 'Чтение и озвучка', sentenceN: 'Предложение {a} из {b}', onShort: 'вкл',
   translationT: 'Перевод', focusT: 'Фокус', pagesSide: 'вбок', pagesScroll: 'лента', orbitTitle: 'Удерживай орбиту',
   orbitHint: 'Веди палец по дуге и отпусти на нужном. Внешнее кольцо — скорость, внутреннее — режимы.', hintOrbit: '<b>Совет:</b> удерживайте оранжевую кнопку — скорость, голос, таймер сна, перевод, фокус и страницы.' });
+Object.assign(D.en, { moreT: 'More', orbitsT: 'Orbits', speedHint: 'Drag the knob along the orbit', prevT: 'Previous sentence', nextT: 'Next sentence', textT: 'Text',
+  orbitHint: 'Slide along an orbit and let go on what you need, or tap. Tap the text to go back to reading.',
+  hintOrbit2: '<b>Hold the orange button</b> — every setting lives on its orbits. Tap a word to start reading from it.' });
+Object.assign(D.ru, { moreT: 'Ещё', orbitsT: 'Орбиты', speedHint: 'Ведите ползунок по орбите', prevT: 'Предыдущее предложение', nextT: 'Следующее предложение', textT: 'Текст',
+  orbitHint: 'Веди палец по орбите и отпусти на нужном — или просто нажми. Нажми на текст, чтобы вернуться к чтению.',
+  hintOrbit2: '<b>Удерживайте оранжевую кнопку</b> — все настройки на её орбитах. Нажмите на слово — чтение начнётся с него.' });
 let lang = localStorage.getItem('murmur:ui') || ((navigator.language || 'en').startsWith('ru') ? 'ru' : 'en');
 export const t = k => (D[lang] && D[lang][k]) || D.en[k] || k;
 export const uiLang = () => lang;
