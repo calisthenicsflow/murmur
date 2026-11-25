@@ -1,19 +1,19 @@
-import { db } from './db.js?v=1.6.1';
-import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.6.1';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.6.1';
-import { coverSVG, autoCover } from './covers.js?v=1.6.1';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.6.1';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.6.1';
-import { Player } from './player.js?v=1.6.1';
-import { translateMany } from './translate.js?v=1.6.1';
-import { track, summary } from './stats.js?v=1.6.1';
-import { renderCard, shareCard } from './quotes.js?v=1.6.1';
-import { openStudio, defaultStyle } from './studio.js?v=1.6.1';
-import { presetById, FORMATS } from './qrender.js?v=1.6.1';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.6.1';
-import { SAMPLES } from './samples.js?v=1.6.1';
+import { db } from './db.js?v=1.6.2';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.6.2';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.6.2';
+import { coverSVG, autoCover } from './covers.js?v=1.6.2';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.6.2';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.6.2';
+import { Player } from './player.js?v=1.6.2';
+import { translateMany } from './translate.js?v=1.6.2';
+import { track, summary } from './stats.js?v=1.6.2';
+import { renderCard, shareCard } from './quotes.js?v=1.6.2';
+import { openStudio, defaultStyle } from './studio.js?v=1.6.2';
+import { presetById, FORMATS } from './qrender.js?v=1.6.2';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.6.2';
+import { SAMPLES } from './samples.js?v=1.6.2';
 
-export const APP_VERSION = '1.6.1';
+export const APP_VERSION = '1.6.2';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -855,7 +855,7 @@ function positionHL(instant) {
   if (same) return;
   const jump = instant || !hlLast || !$('#hl')?.classList.contains('on') || hlLast.el === el || hlLast.n !== places.length || Math.abs(hlLast.y - p0.y) > H * 0.5;
   const pills = hlPills(places.length);
-  // 1.6.1 "drop" morph: to the next word on the same line the pill's leading edge flows ahead
+  // 1.6.2 "drop" morph: to the next word on the same line the pill's leading edge flows ahead
   // (stretching over the gap, slightly thinner), then the trailing edge catches up. Only the
   // pill in #hls animates — nothing inside the text / CSS columns changes (1.4.2 flicker fix).
   const morph = !jump && places.length === 1 && hlLast.n === 1 && !REDUCED_MOTION.matches && Math.abs(hlLast.y - p0.y) < 1 &&
@@ -935,7 +935,7 @@ function layoutPages() {
     if (sc.scrollTop) sc.scrollTop = 0;
     const pw = pageW();
     const top = rdTopPx();
-    const bottom = 78 + envInset('bottom'); // 1.6.1: the page runs down to a compact corner orb (no strip / bar band)
+    const bottom = 78 + envInset('bottom'); // 1.6.2: the page runs down to a compact corner orb (no strip / bar band)
     const h = Math.max(80, Math.round(sc.clientHeight - top - bottom));
     const key = pw + '|' + top + '|' + bottom + '|' + h;
     if (S._pgKey === key) return; // nothing changed — touching column CSS here makes WebKit flash the page
@@ -1952,7 +1952,7 @@ function focusWord(w) {
     host.appendChild(pill);
   });
 }
-// focus (1.6.1): the spoken word itself, big and centred on a solid orange pill; the sentence sits under it
+// focus (1.6.2): the spoken word itself, big and centred on a solid orange pill; the sentence sits under it
 function heroWord(w) {
   const box = $('#fWord'), sp = box && box.firstElementChild; if (!sp || !S.model) return;
   const idle = w < 0, cur = S.model.sents[Math.max(0, S.curS)];
@@ -2596,11 +2596,11 @@ function reloadWhenIdle(ver) {
   const iv = setInterval(() => { if (!busy()) { clearInterval(iv); go(); } }, 5000);
 }
 
-/* ------------------------------ orbit: round player + hold-for-orbits menu (1.6.1) ------------------------------ */
+/* ------------------------------ orbit: round player + hold-for-orbits menu (1.6.2) ------------------------------ */
 // The reading view shows only the orb. Tap = play / pause. Hold = the orbits: inner ring (modes), outer ring (speed,
 // theme, text, more). Options apply in place and the menu stays; tap the text (or the orb) to go back to reading.
 // Speed opens an arc slider on the same orbit.
-const SPD_TICKS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]; // the speed orbit snaps hard to these (1.6.1)
+const SPD_TICKS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]; // the speed orbit snaps hard to these (1.6.2)
 const THEMES = ['paper', 'sepia', 'night'];
 function orbitSync() {
   const rd = $('#reader'); if (!rd || !S.model || !S.book) return;
@@ -2638,7 +2638,7 @@ const IC = {
   stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" style="fill:currentColor;stroke:none"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>'
 };
-function arcInner() { // state = the circle itself (orange = on); sub-labels only for real values, never on/off (1.6.1)
+function arcInner() { // state = the circle itself (orange = on); sub-labels only for real values, never on/off (1.6.2)
   return [
     { k: 'voice', n: t('voice'), v: voiceShort() === '—' ? '' : voiceShort(), ic: IC.voice },
     { k: 'timer', n: t('sleepTimer'), v: S.timer ? ($('#dTimerTxt')?.textContent || '') : '', on: !!S.timer, ic: IC.timer },
@@ -2654,71 +2654,66 @@ function arcOuter() {
     { k: 'text', v: `Aa ${prefs.fs}`, ic: '', n: t('textSize') }
   ];
 }
-// collision-free layout (1.6.1): every circle, label and chip keeps >= GAP px from every other one and from the edges
+// collision-free layout (1.6.2): every circle, label and chip keeps >= GAP px from every other one and from the edges
 const ARC_GAP = 8;
 const rOver = (a, b, g) => a.l < b.r + g && b.l < a.r + g && a.t < b.b + g && b.t < a.b + g;
 const rAt = (x, y, w, h) => ({ l: x - w / 2, t: y - h / 2, r: x + w / 2, b: y + h / 2 });
 function arcLayout(g, top, inner, outer) {
-  const placed = [], bad = [], E = 8, bottom = g.H - 8;
+  // 1.6.2: an orderly layout. Inner circles climb an elliptic arc in even vertical steps, each with its label on the
+  // same side (left) at the same distance; the outer chips sit evenly spaced on a wider arc. Everything keeps ARC_GAP.
+  const E = 8, bottom = g.H - 8, CR = 25, LG = 8, n = inner.length, bad = [];
   const orbR = { l: g.cx - 62, t: g.cy - 62, r: g.cx + 62, b: g.cy + 62 };
-  const fits = (rc, gap = ARC_GAP) => rc.l >= E && rc.r <= g.W - E && rc.t >= top && rc.b <= bottom && !rOver(rc, orbR, 6) && !placed.some(p => rOver(rc, p, gap));
-  const n = inner.length, CR = 25;
-  // inner ring: as large as the space allows, circles evenly from 180° to 270°
-  const R1 = Math.max(118, Math.min(g.R1, g.cx - 8 - CR - 4, g.cy - top - CR - 4));
-  const circ = inner.map((it, i) => { const a = 180 + i * 90 / (n - 1), [x, y] = polar(g, R1, a); const rc = rAt(x, y, 2 * CR, 2 * CR); placed.push(rc); return { x, y, a, rc }; });
-  // labels: beside their circle, away from the ring first (outward), then inward, then left / up / right / down
-  const lab = inner.map((it, i) => {
-    const c = circ[i], out = c.a * Math.PI / 180;
-    const dirs = [out, out + Math.PI, Math.PI, -Math.PI / 2, 0, Math.PI / 2];
-    for (let k = 1; k < 8; k++) dirs.push(out + k * Math.PI / 4);
-    const tryAt = (w, h) => {
-      for (const extra of [6, 14, 26]) for (const d of dirs) {
-        const ux = Math.cos(d), uy = Math.sin(d), ext = Math.abs(ux) * w / 2 + Math.abs(uy) * h / 2, dist = CR + extra + ext;
-        let rc = rAt(c.x + ux * dist, c.y + uy * dist, w, h);
-        const sx = rc.l < E ? E - rc.l : rc.r > g.W - E ? g.W - E - rc.r : 0; // slide inside the screen edge
-        if (sx) rc = { l: rc.l + sx, r: rc.r + sx, t: rc.t, b: rc.b };
-        if (!placed.some((p, j) => j !== i && rOver(rc, p, ARC_GAP)) && rc.l >= E && rc.r <= g.W - E && rc.t >= top && rc.b <= bottom && !rOver(rc, orbR, 6) && !rOver(rc, c.rc, 3)) return rc;
-      }
-      return null;
-    };
-    let rc = tryAt(it.w, it.h);
-    if (!rc && it.v) { rc = tryAt(it.w1 || it.w, it.h1 || it.h); if (rc) it.one = true; } // no room: one line, name only
-    if (!rc) { bad.push(it.k); rc = rAt(c.x - CR - 6 - it.w / 2, c.y, it.w, it.h); }
-    placed.push(rc); return rc;
+  const V = g.cy - top, chipH = Math.max(...outer.map(o => o.h));
+  const step = Math.max(58, Math.min(64, (V - chipH - 2 * ARC_GAP - 24) / (n - 1 + 1.4)));
+  const ryE = (n - 1) * step / 0.97;
+  const wmax = Math.max(...inner.map(it => it.w));
+  const rx = Math.max(96, Math.min(150, g.cx - CR - LG - wmax - E - 2));
+  const circ = [], lab = [], placed = [];
+  inner.forEach((it, i) => {
+    const y = g.cy - i * step, k = Math.sqrt(Math.max(0, 1 - Math.pow(i * step / ryE, 2))), x = g.cx - rx * k;
+    const rc = rAt(x, y, 2 * CR, 2 * CR); circ.push({ x, y, rc });
+    const lr = { l: x - CR - LG - it.w, r: x - CR - LG, t: y - it.h / 2, b: y + it.h / 2 }; lab.push(lr);
+    placed.push(rc, lr);
   });
-  // chips: on the outer orbit, nearest free spot to their preferred angle
-  const R2 = R1 + 122, pref = [200, 230, 258];
-  const chips = outer.map((it, i) => {
-    for (const dr of [0, 14, -14, 28, -28, 44, 60]) for (let k = 0; k <= 45; k++) for (const sg of k ? [1, -1] : [1]) {
-      const a = pref[i] + sg * k * 2; if (a < 176 || a > 274) continue;
-      const [x, y] = polar(g, R2 + dr, a), rc = rAt(x, y, it.w, it.h);
-      if (fits(rc)) { placed.push(rc); return rc; }
+  const ok = rc => rc.l >= E && rc.r <= g.W - E && rc.t >= top && rc.b <= bottom && !rOver(rc, orbR, 6) && !placed.some(p => rOver(rc, p, ARC_GAP));
+  let chips = null, R2x = rx + 110, R2y = ryE + 100;
+  search: for (const dy of [100, 112, 88, 124, 76, 136]) for (const dx of [110, 124, 96, 140, 82]) for (let a0 = 236; a0 >= 200; a0 -= 2) {
+    const rx2 = rx + dx, ry2 = Math.min(ryE + dy, V - chipH / 2 - 2), m = outer.length, got = [];
+    for (let j = 0; j < m; j++) {
+      const a = (a0 + (270 - a0) * j / (m - 1)) * Math.PI / 180;
+      const rc = rAt(g.cx + rx2 * Math.cos(a), g.cy + ry2 * Math.sin(a), outer[j].w, outer[j].h);
+      if (!ok(rc) || got.some(p => rOver(rc, p, ARC_GAP))) break;
+      got.push(rc);
     }
-    bad.push(it.k); const [x, y] = polar(g, R2, pref[i]); const rc = rAt(x, y, it.w, it.h); placed.push(rc); return rc;
-  });
-  return { R1, R2, circ, lab, chips, bad };
+    if (got.length === m) { chips = got; R2x = rx2; R2y = ry2; break search; }
+  }
+  if (!chips) { bad.push('chips'); chips = outer.map((o, j) => { const a = (220 + 25 * j) * Math.PI / 180; return rAt(g.cx + R2x * Math.cos(a), g.cy + R2y * Math.sin(a), o.w, o.h); }); }
+  inner.forEach((it, i) => { const r = lab[i]; if (r.l < E || r.t < top) bad.push(it.k); });
+  return { R1: rx, R1y: ryE, R2: R2x, R2y, circ, lab, chips, bad };
 }
 function renderArc() {
   const m = $('#arcm'), box = $('#arcItems'); if (!m || !box) return;
   const g = arcGeo(), sp = m.classList.contains('spd'), lm = S.mode === 'listen';
   let h = '', head = '';
   if (sp) {
-    head = `<div class="arc-row bare"><button class="ach" data-k="orbits">${IC.back}<span>${t('orbitsT')}</span></button><button class="ach" data-k="rate1">1.0×</button></div>`;
+    head = ''; // 1.6.2: the back / reset chips sit by the arc start, nothing over the page header
   } else {
-    head = ''; // 1.6.1 (t170u): no title, status line or transport row — just the orbits
+    head = ''; // 1.6.2 (t170u): no title, status line or transport row — just the orbits
   }
   $('#arcTtl').innerHTML = head;
   m.style.setProperty('--ox', g.cx.toFixed(0) + 'px'); m.style.setProperty('--oy', g.cy.toFixed(0) + 'px'); m.style.setProperty('--dr', Math.round(Math.max(g.R2 + 150, Math.min(g.cy, g.cx) * 1.05)) + 'px');
   const card = $('#arcTtl .arc-row') || $('#reader .rd-bar'), top = card ? card.getBoundingClientRect().bottom - g.rr.top + ARC_GAP + 4 : 140;
   const t1 = m.querySelector('.a1'), t2 = m.querySelector('.a2');
-  const ring = (el, R) => Object.assign(el.style, { left: g.cx - R + 'px', top: g.cy - R + 'px', width: 2 * R + 'px', height: 2 * R + 'px' });
+  const ring = (el, R, Ry = R) => Object.assign(el.style, { left: g.cx - R + 'px', top: g.cy - Ry + 'px', width: 2 * R + 'px', height: 2 * Ry + 'px' });
   if (sp) {
-    const RS = g.RS, [x0, y0] = polar(g, RS, 180), [x1, y1] = polar(g, RS, 270);
+    const RS = g.RS, [x0, y0] = polar(g, RS, SP_A0), [x1, y1] = polar(g, RS, 270);
     h = `<svg class="arc-sl" style="width:${g.W}px;height:${g.H}px" viewBox="0 0 ${g.W} ${g.H}"><path class="tr" d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${RS} ${RS} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}"/>
-      <path class="fl" id="spFill" d=""/>${SPD_TICKS.map(v => { const a = spAngle(v), [x0, y0] = polar(g, RS - 11, a), [x1, y1] = polar(g, RS + 11, a); return `<line class="tk" data-v="${v}" x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}"/>`; }).join('')}<circle class="kn" id="spKnob" r="17" cx="0" cy="0"/></svg>`;
-    h += SPD_TICKS.filter(v => v !== 1.25 && v !== 1.75).map(v => { const [lx, ly] = polar(g, RS - 42, spAngle(v)); return `<span class="sk" data-v="${v}" style="left:${lx.toFixed(0)}px;top:${ly.toFixed(0)}px">${String(v).replace(/^0/, '')}</span>`; }).join('');
+      <path class="fl" id="spFill" d=""/>${SPD_TICKS.map(v => { const a = spAngle(v), [ax, ay] = polar(g, RS - 7, a), [bx, by] = polar(g, RS + 7, a); return `<line class="tk" x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}"/>`; }).join('')}<circle class="kn" id="spKnob" r="14" cx="0" cy="0"/></svg>`;
+    // every number at the same radial offset just outside the arc, centred on its tick
+    h += SPD_TICKS.map(v => { const [lx, ly] = polar(g, RS + 30, spAngle(v)); return `<span class="sk" style="left:${lx.toFixed(1)}px;top:${ly.toFixed(1)}px">${v}</span>`; }).join('');
     h += `<span class="spk" id="spv"></span>`;
-    box.innerHTML = h; ring(t1, g.R1); ring(t2, g.R2); spPaint(prefs.rate); return;
+    h += `<div class="sp-ctl" style="left:${x0.toFixed(0)}px;top:${(g.cy + 14).toFixed(0)}px"><button class="ach" data-k="orbits" aria-label="${t('orbitsT')}">${IC.back}</button><button class="ach" data-k="rate1">1×</button></div>`;
+    box.innerHTML = h; spPaint(prefs.rate); return;
   }
   // measure, then place
   const inner = arcInner(), outer = arcOuter();
@@ -2731,12 +2726,12 @@ function renderArc() {
   inner.forEach((it, i) => {
     const c = L.circ[i], r = L.lab[i];
     h += `<button class="rb ${it.on ? 'on' : ''}" data-k="${it.k}" style="left:${(c.x - 25).toFixed(0)}px;top:${(c.y - 25).toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}</button>`;
-    h += `<div class="rl" data-for="${it.k}" style="left:${r.l.toFixed(0)}px;top:${r.t.toFixed(0)}px"><b>${esc(it.n)}</b>${it.v && !it.one ? `<span>${esc(it.v)}</span>` : ''}</div>`;
+    h += `<div class="rl" data-for="${it.k}" style="left:${r.l.toFixed(0)}px;top:${r.t.toFixed(0)}px"><b>${esc(it.n)}</b>${it.v ? `<span>${esc(it.v)}</span>` : ''}</div>`;
   });
   outer.forEach((it, i) => { const r = L.chips[i];
     h += `<button class="ch ${it.k === 'speed' ? 'acc' : ''}" data-k="${it.k}" style="left:${r.l.toFixed(0)}px;top:${r.t.toFixed(0)}px" aria-label="${esc(it.n)}">${it.ic}<span>${esc(it.v)}</span></button>`; });
   box.innerHTML = h; m.dataset.bad = L.bad.join(',');
-  ring(t1, L.R1); ring(t2, L.R2);
+  ring(t1, L.R1, L.R1y); ring(t2, L.R2, L.R2y);
 }
 function openArc(speed = false) {
   const rd = $('#reader'), m = $('#arcm'); if (!rd || !m) return;
@@ -2751,23 +2746,23 @@ function closeArc() { const m = $('#arcm'); if (!m) return; m.classList.remove('
 const arcOpen = () => !!$('#arcm')?.classList.contains('show');
 /* speed slider on the orbit */
 // ticks are spread evenly over the quarter orbit; an off-tick saved rate sits between its neighbours
+const SP_A0 = 194; // the speed arc runs from just above the orb's left to straight up
 function spAngle(v) {
-  const T = SPD_TICKS, n = T.length - 1;
-  if (v <= T[0]) return 180; if (v >= T[n]) return 270;
+  const T = SPD_TICKS, n = T.length - 1, span = 270 - SP_A0;
+  if (v <= T[0]) return SP_A0; if (v >= T[n]) return 270;
   const i = T.findIndex((x, j) => v >= x && v <= T[j + 1]);
-  return 180 + (i + (v - T[i]) / (T[i + 1] - T[i])) * 90 / n;
+  return SP_A0 + (i + (v - T[i]) / (T[i + 1] - T[i])) * span / n;
 }
 function spValue(deg) {
-  const n = SPD_TICKS.length - 1, f = (Math.max(180, Math.min(270, deg)) - 180) / 90 * n;
+  const n = SPD_TICKS.length - 1, f = (Math.max(SP_A0, Math.min(270, deg)) - SP_A0) / (270 - SP_A0) * n;
   return SPD_TICKS[Math.round(f)];
 }
 function spPaint(v) {
-  const g = arcGeo(), a = spAngle(v), [x0, y0] = polar(g, g.RS, 180), [kx, ky] = polar(g, g.RS, a);
+  const g = arcGeo(), a = spAngle(v), [x0, y0] = polar(g, g.RS, SP_A0), [kx, ky] = polar(g, g.RS, a);
   const f = $('#spFill'), k = $('#spKnob'); if (!f || !k) return;
-  f.setAttribute('d', a > 180.2 ? `M${x0.toFixed(1)} ${y0.toFixed(1)} A${g.RS} ${g.RS} 0 0 1 ${kx.toFixed(1)} ${ky.toFixed(1)}` : '');
+  f.setAttribute('d', a > SP_A0 + 0.2 ? `M${x0.toFixed(1)} ${y0.toFixed(1)} A${g.RS} ${g.RS} 0 0 1 ${kx.toFixed(1)} ${ky.toFixed(1)}` : '');
   k.setAttribute('cx', kx.toFixed(1)); k.setAttribute('cy', ky.toFixed(1));
-  const sv = $('#spv'); if (sv) { const [px, py] = polar(g, g.RS + 42, a); sv.textContent = fmtRate(v); sv.style.left = px.toFixed(0) + 'px'; sv.style.top = py.toFixed(0) + 'px'; }
-  $$('#arcm .sk').forEach(e => e.classList.toggle('on', Math.abs(+e.dataset.v - v) < 0.001));
+  const sv = $('#spv'); if (sv) { const [px, py] = polar(g, g.RS - 40, a); sv.textContent = fmtRate(v); sv.style.left = px.toFixed(0) + 'px'; sv.style.top = py.toFixed(0) + 'px'; }
 }
 function setRateNow(v) {
   prefs.rate = v; savePrefs(); player.setRate(v); $('#pSpeed').textContent = fmtRate(v); updateProgress();

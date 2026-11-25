@@ -90,7 +90,7 @@ body[data-theme=sepia] .fc1{background:#F6EEDF}
 .rd-next button{border:1px solid var(--hair);background:var(--chip)}
 .rd-next .end{font-family:var(--display)}
 
-/* the orbit band (1.6.1): only the orb + its progress ring. No floor, no satellites — the text stays visible. */
+/* the orbit band (1.6.2): only the orb + its progress ring. No floor, no satellites — the text stays visible. */
 #reader .dock.orbit{display:block;position:absolute;left:auto;right:0;bottom:0;width:132px;height:calc(var(--safe-b) + 120px);padding:0;gap:0;z-index:30;pointer-events:none;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .orbit>*{pointer-events:auto}
@@ -219,7 +219,7 @@ body[data-theme=night] .st-tile,body[data-theme=night] .st-week{border-color:rgb
 .st-actions .pill-black{background:var(--accent);color:var(--accent-ink);box-shadow:var(--glow)}
 .st-bookbtn,.st-pal,.st-save,.st-fmt{background:var(--chip);border-color:var(--hair)}
 
-/* 1.6.1: compact solid header card, label pills, scale pills — no full backdrop */
+/* 1.6.2: compact solid header card, label pills, scale pills — no full backdrop */
 .arcm .rb,.arcm .ch,.arcm .ach{background:var(--card)}
 .arcm .rb{width:50px;height:50px}
 .arcm .rb.on{background:var(--accent)}
@@ -236,21 +236,21 @@ body[data-theme=night] .st-tile,body[data-theme=night] .st-week{border-color:rgb
 .arc-card .spv{display:inline;background:none;padding:0;margin:0;font:600 40px/1 var(--display);font-variant-numeric:lining-nums;font-feature-settings:"lnum" 1;color:var(--ink);letter-spacing:-.02em}
 .arcm .sk{position:absolute;translate:-50% -50%;background:var(--card);border:1px solid var(--chipB);border-radius:9px;padding:2px 7px;font:700 12px/1.2 var(--ui);color:var(--ink2);font-variant-numeric:lining-nums;pointer-events:none;white-space:nowrap}
 
-/* 1.6.1 (t165u): radial dim centred on the orb — the one allowed gradient; fades in/out with .arcm opacity */
+/* 1.6.2 (t165u): radial dim centred on the orb — the one allowed gradient; fades in/out with .arcm opacity */
 :root{--dimc:40,28,16} body[data-theme=sepia]{--dimc:46,30,14} body[data-theme=night]{--dimc:0,0,0}
 .arcm{background:radial-gradient(circle var(--dr,520px) at var(--ox,85%) var(--oy,90%),rgba(var(--dimc),.4) 0,rgba(var(--dimc),.3) 28%,rgba(var(--dimc),.12) 62%,rgba(var(--dimc),0) 100%)}
-/* 1.6.1 (t166u): speed orbit — no header, discrete ticks, value pill beside the knob */
+/* 1.6.2 (t166u): speed orbit — no header, discrete ticks, value pill beside the knob */
 .arc-row.bare{margin:0}
 .arc-sl line.tk{stroke:var(--ink2);stroke-width:2;stroke-linecap:round;opacity:.6;fill:none}
 .arcm .sk{font-size:11px;padding:2px 6px}
 .arcm .sk.on{color:var(--accent-deep);border-color:var(--accent)}
 .arcm .spk{position:absolute;translate:-50% -50%;background:var(--card);border:1.5px solid var(--accent);border-radius:12px;padding:4px 10px;font:700 17px/1.1 var(--ui);color:var(--ink);font-variant-numeric:lining-nums;pointer-events:none;white-space:nowrap;box-shadow:var(--sat-sh)}
 body[data-theme=night] .arcm .spk{box-shadow:0 0 10px rgba(255,90,31,.35)}
-/* 1.6.1 (t168u): pages mode — the column runs to the bottom; a compact orb sits in the corner under it */
+/* 1.6.2 (t168u): pages mode — the column runs to the bottom; a compact orb sits in the corner under it */
 #reader.pages #pPlay.orb{right:20px;bottom:calc(var(--safe-b) + 10px);width:56px;height:56px}
 #reader.pages #pPlay.orb svg{width:22px;height:22px}
 #reader.pages .o-ring{right:14px;bottom:calc(var(--safe-b) + 4px);width:68px;height:68px}
-/* 1.6.1 (t169u): focus = the spoken word, big and centred on a solid orange pill (flat, light glow) */
+/* 1.6.2 (t169u): focus = the spoken word, big and centred on a solid orange pill (flat, light glow) */
 .f-stage{gap:26px}
 .f-word{display:flex;justify-content:center;align-items:center;min-height:96px}
 .f-word span{display:inline-block;max-width:100%;font-family:var(--serif);font-weight:600;line-height:1.15;letter-spacing:-.01em;padding:.1em .38em .14em;border-radius:20px;background:var(--accent);color:var(--accent-ink);box-shadow:0 0 22px -4px rgba(255,90,31,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:lining-nums}
@@ -259,5 +259,20 @@ body[data-theme=paper] .f-word span,body[data-theme=sepia] .f-word span{box-shad
 .f-s.cur .w{padding:0;margin:0}
 .f-s.cur{font-size:clamp(19px,5.4vw,23px);text-align:center}
 .f-s.cur.long{font-size:18px}.f-s.cur.xlong{font-size:16px}
-/* 1.6.1 QA: one size control in «Текст» (the slider with its number), not two */
+/* 1.6.2 QA: one size control in «Текст» (the slider with its number), not two */
 #fsSteps{display:none}
+/* 1.6.2: calmer speed arc, numbers just outside it, back / reset chips by the arc start */
+.arc-sl .tr{stroke-width:5;stroke:var(--trk2)}
+body[data-theme=night] .arc-sl .tr{stroke:rgba(242,236,226,.14)}
+.arc-sl .fl{stroke-width:5}
+.arc-sl line.tk{stroke-width:1.5;opacity:.5}
+.arcm .sk{font:600 11px/1.2 var(--ui);padding:2px 6px;color:var(--ink2);border-radius:8px}
+.arcm .sk.on{color:var(--ink2);border-color:var(--chipB)}
+.arcm .sp-ctl{position:absolute;translate:-50% 0;display:flex;gap:8px}
+.arcm .sp-ctl .ach{height:36px;min-width:36px;padding:0 11px;background:var(--card);box-shadow:var(--sat-sh)}
+.arcm .spk{font-size:15px;padding:3px 9px}
+/* orbit labels read toward their circle */
+.arcm .rl{align-items:flex-end;text-align:right}
+/* radial dim: ~40% at the orb in every theme, clear at the edges */
+:root{--dimc:34,22,10} body[data-theme=sepia]{--dimc:40,26,10} body[data-theme=night]{--dimc:0,0,0}
+.arcm{background:radial-gradient(circle var(--dr,520px) at var(--ox,85%) var(--oy,90%),rgba(var(--dimc),.42) 0,rgba(var(--dimc),.38) 30%,rgba(var(--dimc),.22) 62%,rgba(var(--dimc),.07) 85%,rgba(var(--dimc),0) 100%)}
