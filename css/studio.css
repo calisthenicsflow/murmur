@@ -1,7 +1,7 @@
 /* ------------------------------ Quote studio ------------------------------ */
-.studio{position:fixed;inset:0;z-index:96;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);opacity:0;transform:translateY(28px);pointer-events:none;transition:opacity .4s var(--ease),transform .5s var(--ease)}
+.studio{position:fixed;inset:0;z-index:96;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);opacity:0;transform:translateY(16px);pointer-events:none;transition:opacity 220ms var(--move),transform 260ms var(--move)}
 .studio.show{opacity:1;transform:none;pointer-events:auto}
-@media (min-width:700px){ .studio{max-width:520px;left:50%;right:auto;width:100%;transform:translate(-50%,28px)} .studio.show{transform:translateX(-50%)} }
+@media (min-width:700px){ .studio{max-width:520px;left:50%;right:auto;width:100%;transform:translate(-50%,16px)} .studio.show{transform:translateX(-50%)} }
 .st-top{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:calc(var(--safe-t) + 10px) 16px 6px}
 .st-title{font-family:var(--display);font-size:21px;font-weight:500;text-align:center;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .st-bookbtn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 13px 0 10px;border-radius:18px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:13px;font-weight:600;transition:color .2s,background .2s,border-color .2s}
