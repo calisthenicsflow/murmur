@@ -1,19 +1,19 @@
-import { db } from './db.js?v=1.7.1';
-import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.7.1';
-import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.7.1';
-import { coverSVG, autoCover } from './covers.js?v=1.7.1';
-import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.7.1';
-import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.7.1';
-import { Player } from './player.js?v=1.7.1';
-import { translateMany } from './translate.js?v=1.7.1';
-import { track, summary } from './stats.js?v=1.7.1';
-import { renderCard, shareCard } from './quotes.js?v=1.7.1';
-import { openStudio, defaultStyle } from './studio.js?v=1.7.1';
-import { presetById, FORMATS } from './qrender.js?v=1.7.1';
-import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.7.1';
-import { SAMPLES } from './samples.js?v=1.7.1';
+import { db } from './db.js?v=1.7.2';
+import { t, uiLang, setUiLang, plural } from './i18n.js?v=1.7.2';
+import { buildModel, detectLang, wc, wordSpans } from './text.js?v=1.7.2';
+import { coverSVG, autoCover } from './covers.js?v=1.7.2';
+import { createWebSpeechEngine, createEdgeEngine, langName, nativeName, regionName, SILENT, ttsStats } from './engines.js?v=1.7.2';
+import { CURATED, CATALOG, PREVIEW_TEXT } from './voices.js?v=1.7.2';
+import { Player } from './player.js?v=1.7.2';
+import { translateMany } from './translate.js?v=1.7.2';
+import { track, summary } from './stats.js?v=1.7.2';
+import { renderCard, shareCard } from './quotes.js?v=1.7.2';
+import { openStudio, defaultStyle } from './studio.js?v=1.7.2';
+import { presetById, FORMATS } from './qrender.js?v=1.7.2';
+import { fromText, fromPDF, fromEPUB, fromURL } from './importers.js?v=1.7.2';
+import { SAMPLES } from './samples.js?v=1.7.2';
 
-export const APP_VERSION = '1.7.1';
+export const APP_VERSION = '1.7.2';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ICON = {
@@ -159,8 +159,8 @@ function renderLibrary() {
     const playing = S.book && S.book.id === last.id && player.playing;
     $('#continue').innerHTML = `<div class="cont hero" data-open="${last.id}">
       <button class="go hring" aria-label="${t('listen')}">${ringSVG(p)}<span class="orb hcore"><b>${Math.floor(p * 100)}<small>%</small></b></span></button>
-      <div class="meta"><div class="k">● ${t(playing ? 'nowPlaying' : 'continue')}</div><div class="t">${esc(last.title)}</div>${last.author ? `<div class="au">${esc(last.author)}</div>` : ''}
-      <div class="pl">${esc(last.sections.length > 1 ? chapterName(sec, Infinity, last) : t('fromPlace'))}<span>${t('leftT')} ${fmtLeft(bookLeftMin(last)).replace('~', '')}</span></div></div></div>`;
+      <button type="button" class="meta"><div class="k">● ${t(playing ? 'nowPlaying' : 'continue')}</div><div class="t">${esc(last.title)}</div>${last.author ? `<div class="au">${esc(last.author)}</div>` : ''}
+      <div class="pl">${esc(last.sections.length > 1 ? chapterName(sec, Infinity, last) : t('fromPlace'))}<span>${t('leftT')} ${fmtLeft(bookLeftMin(last)).replace('~', '')}</span></div></button></div>`;
   } else $('#continue').innerHTML = '';
   $('#libOrb').classList.toggle('show', !!last);
   $('#libOrb').dataset.open = last ? last.id : '';
@@ -168,14 +168,21 @@ function renderLibrary() {
   $('#shelves').innerHTML = groups.map((g, gi) => `
     <div class="shelf" style="animation-delay:${.1 + gi * .08}s" data-shelf="${g.id}">
       <div class="shelf-head"><h2>${esc(shelfName(g.id))}</h2><span class="count">${g.books.length} ${plural(g.books.length)}</span></div>
-      <div class="fgrid">${g.books.map(b => `<div class="book" data-open="${b.id}">${flatCover(b)}<div class="ba">${esc(b.author || '')}</div></div>`).join('')}
-        ${g.id === 'mine' ? `<div class="book add" data-add="1"><div class="cv"><span>${ICON.plus}${esc(t('addBooks'))}</span></div></div>` : ''}</div>
+      <div class="fgrid">${g.books.map(b => `<div class="book" role="button" tabindex="0" data-open="${b.id}" aria-label="${esc(b.title || '')}${b.author ? ', ' + esc(b.author) : ''}">${flatCover(b)}<div class="ba">${esc(b.author || '')}</div></div>`).join('')}
+        ${g.id === 'mine' ? `<div class="book add" role="button" tabindex="0" data-add="1" aria-label="${esc(t('addBooks'))}"><div class="cv"><span>${ICON.plus}${esc(t('addBooks'))}</span></div></div>` : ''}</div>
     </div>`).join('');
 }
 $('#library').addEventListener('click', e => {
   const add = e.target.closest('[data-add]'); if (add) return openAdd();
   const go = e.target.closest('.cont .go');
   const o = e.target.closest('[data-open]'); if (o && !S.longPressed) openBook(o.dataset.open, !!go);
+});
+$('#library').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const book = e.target.closest('.book[data-open], .book[data-add]');
+  if (!book || e.target !== book) return;
+  e.preventDefault();
+  book.click();
 });
 // long-press a book → remove
 let lpT; $('#library').addEventListener('pointerdown', e => {
@@ -343,18 +350,39 @@ function updateNextBtn() {
 }
 
 /* ------------------------------ sheets ------------------------------ */
-let sheetClose = null;
+let sheetClose = null, sheetReturn = null;
 function openSheet(html, mount, onClose) {
   const sh = $('#sheet'), body = $('#sheetBody');
+  if (!sh.classList.contains('show')) sheetReturn = document.activeElement;
   body.innerHTML = html; body.scrollTop = 0;
-  body.querySelectorAll('[data-close]').forEach(b => b.onclick = () => closeSheet());
+  body.querySelectorAll('[data-close]').forEach(b => {
+    b.onclick = () => closeSheet();
+    if (!b.getAttribute('aria-label')) b.setAttribute('aria-label', t('close'));
+  });
   sheetClose = onClose || null;
-  requestAnimationFrame(() => { sh.classList.add('show'); $('#scrim').classList.add('show'); });
+  requestAnimationFrame(() => {
+    sh.classList.add('show'); $('#scrim').classList.add('show');
+    const closer = body.querySelector('[data-close]');
+    if (closer) closer.focus({ preventScroll: true });
+  });
   mount && mount(body);
   hidePop();
   hideHint();
 }
-function closeSheet() { $('#sheet').classList.remove('show'); $('#scrim').classList.remove('show'); const f = sheetClose; sheetClose = null; f && f(); }
+function closeSheet() {
+  $('#sheet').classList.remove('show'); $('#scrim').classList.remove('show');
+  const f = sheetClose; sheetClose = null; f && f();
+  const back = sheetReturn; sheetReturn = null;
+  if (back && back.isConnected && typeof back.focus === 'function') back.focus({ preventScroll: true });
+}
+$('#sheet').addEventListener('keydown', e => {
+  if (e.key !== 'Tab' || !$('#sheet').classList.contains('show')) return;
+  const nodes = [...$('#sheet').querySelectorAll('button, a[href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])')].filter(el => !el.disabled && el.getAttribute('aria-hidden') !== 'true' && el.tabIndex >= 0 && (el.offsetParent !== null || el === document.activeElement));
+  if (!nodes.length) return;
+  const first = nodes[0], last = nodes[nodes.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 $('#scrim').onclick = () => closeSheet();
 // drag sheet down to close
 (() => { const sh = $('#sheet'); let y0 = null, dy = 0;
@@ -1378,7 +1406,7 @@ function updateProgress() {
   if (!S.model) return;
   const n = S.model.sents.length, s = Math.max(0, S.curS);
   // progress lives in one place: the capsule («стр. X из Y»); the hairline shows only when the controls are hidden
-  $('#thinProg i').style.width = (bookProg().f * 100).toFixed(2) + '%';
+  $('#thinProg i').style.transform = `scaleX(${Math.max(0, Math.min(1, bookProg().f)).toFixed(4)})`;
   const sub = S.book.author || ''; if ($('#rdSub').textContent !== sub) $('#rdSub').textContent = sub;
   capSync();
 }

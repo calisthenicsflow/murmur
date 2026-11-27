@@ -37,9 +37,9 @@ const D = {
   }
 };
 
-Object.assign(D.en, { continueQ: 'Shall we go on?', libraryT: 'Library', greetMorning: 'Good morning', greetDay: 'Good afternoon', greetEvening: 'Good evening', greetNight: 'Good night', fromPlace: 'From where you stopped', leftT: 'left', readingVoice: 'Reading & voice',
+Object.assign(D.en, { continueQ: 'Shall we go on?', libraryT: 'Library', skip: 'Skip to library', close: 'Close', greetMorning: 'Good morning', greetDay: 'Good afternoon', greetEvening: 'Good evening', greetNight: 'Good night', fromPlace: 'From where you stopped', leftT: 'left', readingVoice: 'Reading & voice',
   translationT: 'Translation', focusT: 'Focus', });
-Object.assign(D.ru, { continueQ: 'Продолжим?', libraryT: 'Библиотека', greetMorning: 'Доброе утро', greetDay: 'Добрый день', greetEvening: 'Добрый вечер', greetNight: 'Доброй ночи', fromPlace: 'С места, где остановились', leftT: 'осталось', readingVoice: 'Чтение и озвучка',
+Object.assign(D.ru, { continueQ: 'Продолжим?', libraryT: 'Библиотека', skip: 'К библиотеке', close: 'Закрыть', greetMorning: 'Доброе утро', greetDay: 'Добрый день', greetEvening: 'Добрый вечер', greetNight: 'Доброй ночи', fromPlace: 'С места, где остановились', leftT: 'осталось', readingVoice: 'Чтение и озвучка',
   translationT: 'Перевод', focusT: 'Фокус', });
 Object.assign(D.en, { textT: 'Text', });
 Object.assign(D.ru, { textT: 'Текст', });

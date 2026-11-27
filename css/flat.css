@@ -298,3 +298,137 @@ body:not([data-theme=night]) .spd-kn{box-shadow:0 6px 14px -6px rgba(255,90,31,.
 .f-tr{font-family:var(--ui);font-size:15.5px;line-height:1.5;color:var(--ink2);border-left:0;padding-left:0;margin:-.35em 0 1.1em;opacity:.85}
 .f-prog{letter-spacing:.18em;font-variant-numeric:lining-nums tabular-nums}
 @media (prefers-reduced-motion:reduce){.f-col,.f-rule{transition:none}.f-s{transition:opacity .2s linear;filter:none!important}.f-s[data-d="1"]{opacity:.3}.f-s[data-d="2"]{opacity:.16}}
+
+/* ===================== 1.7.2 — motion, surfaces, HIG =====================
+   Screen, sheet, and player motion is transform + opacity, 180–280ms.
+   Reading text stays still: no entrance, blur, or stagger on .rd-text. */
+
+@keyframes lib-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes lib-fade{from{opacity:0}to{opacity:1}}
+@keyframes skpulse{50%{opacity:.55}}
+@keyframes playpop{0%{transform:scale(.96)}42%{transform:scale(1.045)}100%{transform:scale(1)}}
+
+#library{background:
+  radial-gradient(120% 48% at 112% -12%, rgba(194,104,52,.10), transparent 54%),
+  radial-gradient(80% 42% at -18% 0%, rgba(138,102,48,.07), transparent 48%),
+  var(--bg)}
+body[data-theme=night] #library{background:
+  radial-gradient(100% 42% at 110% -10%, rgba(255,90,31,.09), transparent 52%),
+  var(--bg)}
+:root{--card-sh:0 1px 1px rgba(62,40,16,.05),0 14px 28px -18px rgba(62,40,16,.28)}
+.cont.hero{box-shadow:var(--card-sh)}
+body[data-theme=night] .cont.hero{box-shadow:0 16px 28px -20px rgba(0,0,0,.65)}
+.fgrid .book .cv.fc{box-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 12px 18px -14px rgba(48,30,14,.5)}
+.cap-bg{box-shadow:var(--cap-sh),inset 0 1px 0 rgba(255,255,255,.42)}
+body[data-theme=night] .cap-bg{box-shadow:var(--cap-sh),inset 0 1px 0 rgba(255,255,255,.06)}
+.sheet{box-shadow:0 -18px 40px -24px rgba(48,30,14,.38),inset 0 1px 0 rgba(255,255,255,.45)}
+body[data-theme=night] .sheet{box-shadow:0 -1px 0 var(--hair),inset 0 1px 0 rgba(255,255,255,.05)}
+.rd-bar::after{content:"";position:absolute;left:0;right:0;top:100%;height:12px;pointer-events:none;background:linear-gradient(to bottom,var(--bg),transparent)}
+#reader.bare .rd-bar::after{opacity:0}
+
+.lib-h1,.sub-title,.sh-title,.shelf-head h2{text-wrap:balance}
+.lib-h1{letter-spacing:-.025em;line-height:.98}
+.sub-title{line-height:.96}
+.lib-greet{letter-spacing:.01em}
+.empty{max-width:28em;margin-inline:auto;text-wrap:pretty;line-height:1.45}
+.hcore b{font-variant-numeric:tabular-nums}
+
+.shelf{animation-name:lib-fade;animation-duration:220ms;animation-timing-function:var(--move);animation-fill-mode:backwards}
+.cont,.qcard,.st-tile{animation-name:lib-in;animation-duration:220ms;animation-timing-function:var(--move);animation-fill-mode:backwards}
+.fgrid .book{animation:lib-in 220ms var(--move) backwards}
+.fgrid .book:nth-child(2){animation-delay:28ms}
+.fgrid .book:nth-child(3){animation-delay:56ms}
+.fgrid .book:nth-child(4){animation-delay:84ms}
+.fgrid .book:nth-child(5){animation-delay:112ms}
+.fgrid .book:nth-child(6){animation-delay:140ms}
+.fgrid .book:nth-child(7){animation-delay:168ms}
+.fgrid .book:nth-child(n+8){animation-delay:196ms}
+#quoteList .qcard:nth-child(2),#statsBody .st-tile:nth-child(2){animation-delay:32ms}
+#quoteList .qcard:nth-child(3),#statsBody .st-tile:nth-child(3){animation-delay:64ms}
+#quoteList .qcard:nth-child(4),#statsBody .st-tile:nth-child(4){animation-delay:96ms}
+#quoteList .qcard:nth-child(n+5),#statsBody .st-tile:nth-child(n+5){animation-delay:128ms}
+#shelves:empty::before{content:"";display:block;height:148px;margin:18px 22px 0;border-radius:18px;background:color-mix(in srgb,var(--ink) 6%,var(--card));animation:skpulse 1.3s var(--move) infinite}
+
+/* press */
+.ghost-btn,.round-btn,.pill-black,.circle-black,.chip,.ctl,.big-btn,.theme-sw,.timer-grid button,.orb-mini,.cbtn,.cspd,.ctb,.tmr,.shelf-chips button,.segs button,.presets button,.qcard .qbtn,.st-save,.about-btn,.ask-btns button,.nav-add,.toc-row,.pop button,.sh-title .x,.book,.cont .go{
+  transition-timing-function:var(--move)}
+.ghost-btn:active,.round-btn:active,.pill-black:active,.circle-black:active,.chip:active,.ctl:active,.big-btn:active,.theme-sw:active,.timer-grid button:active,.orb-mini:active,.cbtn:active,.cspd:active,.ctb:active,.tmr:active,.shelf-chips button:active,.segs button:active,.presets button:active,.qcard .qbtn:active,.qopen:active,.st-save:active,.st-bookbtn:active,.st-fmt button:active,.st-pal:active,.about-btn:active,.ask-btns button:active,.nav-add:active,.toc-row:active,.pop button:active,.sh-title .x:active,.fgrid .book:active,.book.add:active,.play:active,.cap .play:active,.cap .cbtn:active,.cseg button:active,.cap[data-st=listen] .cp-listen [style*="--i"]:active{
+  transform:scale(.98);transition-duration:var(--t-press)}
+.cont.hero:active{transform:scale(.98)}
+.row:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.cont .go:active .hcore{transform:none}
+.recenter.show:active{transform:translate(-50%,0) scale(.98)}
+@media (hover:hover){
+  .fgrid .book:hover{transform:translateY(-2px)}
+  .fgrid .book:hover:active{transform:translateY(-1px) scale(.98)}
+  .ghost-btn:hover,.round-btn:hover,.sh-title .x:hover{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+}
+
+/* 44px targets — visuals can stay tighter only where the capsule geometry requires a slop */
+.ghost-btn,.round-btn,.sh-title .x,.qcard .qbtn,.qcard.q2 .qbtn,.vrow .pv,.ocr-pill button{width:44px;height:44px}
+.rd-bar-sp{width:44px;height:44px}
+.segs button,.presets button,.shelf-chips button,.about-btn,.st-bookbtn,.st-fmt button,.st-pal,.qcard.q2 .qopen,.qopen,.tr-banner button,.ask-btns button{min-height:44px;height:44px}
+.row,.toc-row,.nav-add,.vrow{min-height:44px}
+.pop button{min-height:44px}
+.vrow .pv{flex:none}
+input[type=range]{height:44px}
+.cseg button{position:relative}
+.cseg button::after{content:"";position:absolute;left:0;right:0;top:50%;height:44px;transform:translateY(-50%)}
+@media (hover:hover){.mk-del{min-width:44px;min-height:44px;padding:10px}}
+
+/* capsule: fit five 44px listen controls from 360px up */
+.cap{width:min(372px,calc(100% - 16px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));transition:transform var(--t-panel) var(--move),opacity var(--t-ui) var(--move)}
+.ctb,.tmr,.cspd,.cap .play{width:44px;height:44px}
+.tmr{margin-right:0}
+.cspd{font-size:12.5px;letter-spacing:-.03em}
+.cseg,.cseg .knob{transition-timing-function:var(--move)}
+.cseg{transition-duration:260ms}
+.cseg .knob{transition-duration:240ms}
+.cp{filter:none;transform:translateY(8px);transition:opacity 200ms var(--move),transform var(--t-ui) var(--move),visibility 0s var(--t-ui)}
+.cap[data-st=read] .cp-read,.cap[data-st=listen] .cp-listen,.cap[data-st=speed] .cp-speed{filter:none;transform:none;transition:opacity 220ms var(--move),transform var(--t-panel) var(--move),visibility 0s}
+.cp-listen [style*="--i"]{opacity:0;transform:translateY(6px);transition:opacity 180ms var(--move),transform 200ms var(--move)}
+.cap[data-st=listen] .cp-listen [style*="--i"]{opacity:1;transform:none;transition:opacity 200ms var(--move) calc(var(--i) * 28ms),transform 240ms var(--move) calc(var(--i) * 28ms)}
+.cap[data-st=speed] .spd-nums span{transition:opacity 200ms var(--move) calc(min(var(--i),7) * 24ms),transform 220ms var(--move) calc(min(var(--i),7) * 24ms)}
+.spd-fl,.spd-kn{transition-duration:240ms;transition-timing-function:var(--move)}
+.cap .play.playing{animation:playpop 260ms var(--move)}
+.play.playing::after{animation:none}
+.f-col,.f-rule{transition-duration:280ms;transition-timing-function:var(--move)}
+.cont .meta{display:block;text-align:left;min-width:0;min-height:44px;border-radius:14px}
+
+.lib-top,.sub-top{padding-left:max(22px,env(safe-area-inset-left,0px));padding-right:max(22px,env(safe-area-inset-right,0px))}
+.rd-bar{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.lib-scroll,.sub-scroll{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+@media (max-height:740px){
+  .lib-h1{font-size:40px}
+  .cont.hero{min-height:0;padding:14px 16px;gap:14px}
+  .cont .go.hring{width:108px;height:108px}
+  .cont .t{font-size:22px;-webkit-line-clamp:2}
+  .orb-mini{width:64px;height:64px;right:16px;bottom:calc(var(--safe-b) + 14px)}
+}
+@media (max-width:359px){
+  .lib-top{padding-left:max(10px,env(safe-area-inset-left,0px));padding-right:max(10px,env(safe-area-inset-right,0px))}
+  .top-actions{gap:0}
+  .brand{font-size:22px}
+  .ctb,.tmr,.cspd,.cap .play{width:40px;height:40px}
+  .ctb,.tmr{position:relative}
+  .ctb::after,.tmr::after{content:"";position:absolute;inset:-2px}
+}
+
+button:focus-visible,a:focus-visible,[role="button"]:focus-visible,.book:focus-visible,select:focus-visible,.inp:focus-visible,textarea:focus-visible,.spd:focus-visible,.row:focus-visible,.vrow:focus-visible,.toc-row:focus-visible,.theme-sw:focus-visible,summary:focus-visible,input[type="range"]:focus-visible{
+  outline:2px solid var(--accent-deep);outline-offset:2px}
+.hapt input:focus,.hapt input:focus-visible,.drop-input:focus,.drop-input:focus-visible{outline:none}
+.skip{position:fixed;left:max(12px,env(safe-area-inset-left,0px));top:0;z-index:140;transform:translateY(-130%);padding:12px 16px;min-height:44px;display:inline-flex;align-items:center;border-radius:0 0 14px 14px;background:var(--pill);color:var(--pill-fg);font:600 14px/1.2 var(--ui);text-decoration:none}
+.skip:focus{transform:none;top:var(--safe-t)}
+
+@media (prefers-reduced-motion:reduce){
+  .screen,.screen.active,.sheet,#scrim,#dim,.pop,.toast,.coach,.focus,.player,.recenter,.ocr-pill,
+  .cont,.shelf,.book,.qcard,.st-tile,.bars .stack i,.ghost-btn,.round-btn,.pill-black,.circle-black,
+  .chip,.ctl,.play,.big-btn,.theme-sw,.timer-grid button,.orb-mini,.studio,.ask,.ask-card,.bi-sub,
+  .rd-bar>*,.dock,.thin-prog,.thin-prog i,.sw,.sw::after,.hl,.f-enter,.seg,.seg .knob,
+  .vgroup summary::after,#shelves:empty::before,.skip,.rd-text .tr.load,.f-col,.f-rule,
+  .cap,.cap *{
+    animation:none!important;transition:none!important}
+  .play .spin{animation:spin .9s linear infinite!important}
+  .vrow .pv.loading::after{animation:pvspin .7s linear infinite!important}
+  .st-load i{animation:stspin .8s linear infinite!important}
+}
